@@ -1,0 +1,365 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Before Series ASP API",
+    "version": "1.0.0",
+    "description": "Bilingual one-input, one-card Web3 checks protected by OKX Agent Payments Protocol. Each paid endpoint costs 0.01 USD₮0."
+  },
+  "servers": [
+    {
+      "url": "https://<your-public-domain>"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health and payment readiness",
+        "responses": {
+          "200": {
+            "description": "Service and payment layer are ready"
+          },
+          "503": {
+            "description": "Payment layer is not ready"
+          }
+        }
+      }
+    },
+    "/api/before/ape": {
+      "post": {
+        "operationId": "beforeApe",
+        "summary": "Generate a pre-ape risk check card",
+        "description": "Paste one project, campaign, social, or interaction description. No follow-up questions.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CardInput"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CardResult"
+          },
+          "400": {
+            "$ref": "#/components/responses/InputError"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          }
+        }
+      }
+    },
+    "/api/before/sign": {
+      "post": {
+        "operationId": "beforeSign",
+        "summary": "Generate a wallet signing risk reminder card",
+        "description": "Paste one wallet popup, signature, approval, claim, mint, stake, bridge, or contract interaction description. No wallet connection or transaction execution occurs.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CardInput"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CardResult"
+          },
+          "400": {
+            "$ref": "#/components/responses/InputError"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          }
+        }
+      }
+    },
+    "/api/before/shill": {
+      "post": {
+        "operationId": "beforeShill",
+        "summary": "Generate a Web3 pre-publish copy check card",
+        "description": "Paste one Web3 post or promotional draft. The response includes an edited version without adding facts not present in the source.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CardInput"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CardResult"
+          },
+          "400": {
+            "$ref": "#/components/responses/InputError"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "mcp",
+        "summary": "MCP discovery",
+        "description": "Supports initialize and tools/list. tools/call returns the paid endpoint descriptor and never returns paid analysis for free.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "requestBodies": {
+      "CardInput": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CardInput"
+            },
+            "examples": {
+              "chinese": {
+                "value": {
+                  "content": "限时空投，连接钱包并授权领取。",
+                  "lang": "zh"
+                }
+              },
+              "english": {
+                "value": {
+                  "content": "Approve unlimited token allowance through Permit2.",
+                  "lang": "en"
+                }
+              }
+            }
+          },
+          "text/plain": {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "CardResult": {
+        "description": "One structured bilingual check card",
+        "headers": {
+          "PAYMENT-RESPONSE": {
+            "description": "Settlement proof returned by OKX Payment SDK after a paid replay",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CardResult"
+            }
+          }
+        }
+      },
+      "InputError": {
+        "description": "Invalid, empty, malformed, or oversized input",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "Standard x402 v2 payment challenge generated by the official OKX Payment SDK",
+        "headers": {
+          "PAYMENT-REQUIRED": {
+            "required": true,
+            "description": "Base64-encoded x402 v2 JSON challenge. The first payment option uses exact settlement on eip155:196 for 10000 base units of USD₮0 (0.01).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/X402Challenge"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "CardInput": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "zh",
+              "en"
+            ],
+            "default": "auto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CardResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "service",
+          "requestId",
+          "requestHash",
+          "language",
+          "risk",
+          "scope",
+          "card",
+          "cardText"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "service": {
+            "enum": [
+              "before-ape",
+              "before-sign",
+              "before-shill"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "language": {
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "risk": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "scope": {
+            "type": "object",
+            "required": [
+              "method",
+              "fetchedExternalLinks",
+              "executedInput",
+              "securityCertification"
+            ],
+            "properties": {
+              "method": {
+                "const": "static_text_review"
+              },
+              "fetchedExternalLinks": {
+                "const": false
+              },
+              "executedInput": {
+                "const": false
+              },
+              "securityCertification": {
+                "const": false
+              }
+            }
+          },
+          "card": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "cardText": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "ok",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "X402Challenge": {
+        "type": "object",
+        "required": [
+          "x402Version",
+          "resource",
+          "accepts"
+        ],
+        "properties": {
+          "x402Version": {
+            "const": 2
+          },
+          "resource": {
+            "type": "object",
+            "required": [
+              "url",
+              "description",
+              "mimeType"
+            ]
+          },
+          "accepts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "scheme",
+                "network",
+                "amount",
+                "payTo"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
