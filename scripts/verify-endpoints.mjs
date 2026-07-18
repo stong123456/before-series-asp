@@ -29,7 +29,7 @@ for (const service of services) {
   }, 12_000);
   assert(response.status === 400, `${service.key} invalid-input preflight expected 400, received ${response.status}.`);
   const body = await response.json();
-  assert(body.code === "INPUT_REQUIRED", `${service.key} invalid-input preflight must return INPUT_REQUIRED.`);
+  assert(body.error?.code === "INPUT_REQUIRED", `${service.key} invalid-input preflight must return INPUT_REQUIRED.`);
 }
 
 for (const service of services) {

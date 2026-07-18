@@ -102,6 +102,7 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 ## Launch Verification Snapshot
 
 - Public health: `200`, with payment and reports both ready.
+- Public invalid-input preflight: empty content returns `400 INPUT_REQUIRED` before any payment challenge.
 - Public unpaid verification: all three canonical endpoints return valid 0.01 USD₮0 x402 v2 challenges on X Layer.
 - Public challenge resource URLs: match `https://before.stoneup.xyz/api/before/{ape|sign|shill}` exactly.
 - MCP discovery: exposes only the three paid service descriptors and does not return a free full report.
