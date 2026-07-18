@@ -3,10 +3,10 @@ import express from "express";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { analyzeBeforeApe } from "./analyzers/ape.mjs";
-import { ANALYSIS_VERSION, InputError, normalizeLang } from "./analyzers/common.mjs";
+import { ANALYSIS_VERSION, InputError, normalizeLang, prepareInput } from "./analyzers/common.mjs";
 import { analyzeBeforeShill } from "./analyzers/shill.mjs";
 import { analyzeBeforeSign } from "./analyzers/sign.mjs";
-import { createPaymentLayer, isPaidPath } from "./payment.mjs";
+import { createPaymentLayer, isPaidPath, isProductionRuntime } from "./payment.mjs";
 import { renderReportDocument, renderReportUnavailable } from "./reports/render.mjs";
 import { createReportStore } from "./reports/store.mjs";
 
@@ -15,9 +15,13 @@ dotenv.config({ path: resolve(sourceDir, "../.env"), quiet: true });
 
 const app = express();
 const port = positiveInteger(process.env.PORT, 8790);
+const productionRuntime = isProductionRuntime();
+if (productionRuntime && !String(process.env.PUBLIC_BASE_URL || "").trim()) {
+  throw new Error("PUBLIC_BASE_URL is required in production.");
+}
 const publicBaseUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`);
 const SERVICE_VERSION = "2.0.0";
-const reportStore = await createReportStore();
+const reportStore = await createReportStore({ production: productionRuntime });
 const reportAssetsDir = resolve(sourceDir, "reports/assets");
 const phosphorAssetsDir = resolve(sourceDir, "../node_modules/@phosphor-icons/web/src/regular");
 const SERVICES = [
@@ -56,7 +60,7 @@ app.use((_req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  if (productionRuntime) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
@@ -84,15 +88,30 @@ try {
   throw error;
 }
 
+app.use(express.json({ limit: "24kb", strict: true }));
+app.use(express.text({ type: ["text/*", "application/x-www-form-urlencoded"], limit: "24kb" }));
+
+app.use((req, res, next) => {
+  if (req.method !== "POST" || !isPaidPath(req, SERVICES)) return next();
+  const lang = requestedLang(req);
+  const input = extractInput(req.body);
+  try {
+    prepareInput(input, lang);
+    return next();
+  } catch (error) {
+    if (!(error instanceof InputError)) return next(error);
+    const responseLang = lang === "auto" ? normalizeLang("auto", String(input || "").slice(0, 256)) : lang;
+    const message = responseLang === "zh" ? error.zhMessage : error.enMessage;
+    return res.status(error.status).json(errorPayload(error.code, message));
+  }
+});
+
 if (paymentLayer.middleware) {
   app.use((req, res, next) => {
     if (!isPaidPath(req, SERVICES)) return next();
     return paymentLayer.middleware(req, res, next);
   });
 }
-
-app.use(express.json({ limit: "24kb", strict: true }));
-app.use(express.text({ type: ["text/*", "application/x-www-form-urlencoded"], limit: "24kb" }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -193,8 +212,10 @@ async function handleAnalysis(service, input, lang, res) {
       variants: { [primary.language]: primary, [alternate.language]: alternate }
     });
     const reportUrl = `${publicBaseUrl}/reports/${metadata.id}`;
+    const reportLabel = primary.language === "en" ? "Web report" : "网页报告";
     return res.json({
       ...primary,
+      cardText: `${primary.cardText}\n\n${reportLabel}: ${reportUrl}`,
       reportUrl,
       report: {
         url: reportUrl,
@@ -234,9 +255,13 @@ function extractInput(body) {
 }
 
 function requestedLang(req) {
-  if (typeof req.query?.lang === "string") return normalizeLang(req.query.lang);
-  if (req.body && typeof req.body === "object" && typeof req.body.lang === "string") return normalizeLang(req.body.lang);
+  if (typeof req.query?.lang === "string") return requestedLangValue(req.query.lang);
+  if (req.body && typeof req.body === "object" && typeof req.body.lang === "string") return requestedLangValue(req.body.lang);
   return "auto";
+}
+
+function requestedLangValue(value) {
+  return String(value || "auto").trim().toLowerCase() === "auto" ? "auto" : normalizeLang(value);
 }
 
 function serviceUsage(service, lang) {

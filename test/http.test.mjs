@@ -52,6 +52,18 @@ test("JSON and plain-text requests return exactly one card", async () => {
   assert.match(text.reportUrl, /\/reports\/[A-Za-z0-9_-]{32}$/);
 });
 
+test("lang auto detects Chinese instead of forcing English", async () => {
+  const response = await fetch(`${baseUrl}/api/before/ape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: "限时空投，请连接钱包授权后领取。", lang: "auto" })
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.language, "zh");
+  assert.match(result.cardText, /网页报告:/);
+});
+
 test("every successful check returns a bilingual temporary HTML report", async () => {
   for (const service of ["ape", "sign", "shill"]) {
     const response = await fetch(`${baseUrl}/api/before/${service}`, {
@@ -62,6 +74,7 @@ test("every successful check returns a bilingual temporary HTML report", async (
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.ok(result.reportUrl);
+    assert.ok(result.cardText.includes(`Web report: ${result.reportUrl}`));
 
     const reportPath = `${new URL(result.reportUrl).pathname}`;
     const report = await fetch(`${baseUrl}${reportPath}`);
@@ -71,8 +84,7 @@ test("every successful check returns a bilingual temporary HTML report", async (
     assert.match(report.headers.get("x-robots-tag"), /noindex/);
     const html = await report.text();
     assert.match(html, new RegExp(`Before ${service[0].toUpperCase()}${service.slice(1)}`, "i"));
-    assert.match(html, /data-copy-link/);
-    assert.match(html, /aria-label="Copy link"/);
+    assert.doesNotMatch(html, /data-copy-link|navigator\.clipboard/);
     assert.match(html, /aria-label="Print"/);
     if (service === "shill") assert.match(html, /Overall score/);
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildRouteConfig,
+  isProductionRuntime,
   isPaidPath,
   validateOkxBaseUrl,
   validatePublicBaseUrl
@@ -18,6 +19,14 @@ test("installed OKX SDK exposes the production payment constructors", async () =
   assert.equal(typeof expressSdk.x402ResourceServer, "function");
   assert.equal(typeof coreSdk.OKXFacilitatorClient, "function");
   assert.equal(typeof evmSdk.ExactEvmScheme, "function");
+});
+
+test("Railway and paid deployments always use strict production mode", () => {
+  assert.equal(isProductionRuntime({}), false);
+  assert.equal(isProductionRuntime({ NODE_ENV: "production" }), true);
+  assert.equal(isProductionRuntime({ X402_REQUIRE_PAYMENT: "true" }), true);
+  assert.equal(isProductionRuntime({ RAILWAY_ENVIRONMENT_ID: "env-id" }), true);
+  assert.equal(isProductionRuntime({ RAILWAY_SERVICE_ID: "service-id" }), true);
 });
 
 test("payment config binds all methods to exact 0.01 X Layer resources", () => {

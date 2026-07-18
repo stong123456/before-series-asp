@@ -1,7 +1,7 @@
 const PRICE_USD = "0.01";
 
 export async function createPaymentLayer({ publicBaseUrl, services }) {
-  const required = truthy(process.env.X402_REQUIRE_PAYMENT) || process.env.NODE_ENV === "production";
+  const required = isProductionRuntime();
   const payTo = String(process.env.X402_PAY_TO || process.env.PAY_TO_ADDRESS || "").trim();
   const enabled = truthy(process.env.X402_ENABLED) || Boolean(payTo);
   const network = process.env.X402_NETWORK || "eip155:196";
@@ -65,6 +65,15 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
       return sdkMiddleware(req, res, next);
     }
   };
+}
+
+export function isProductionRuntime(env = process.env) {
+  return env.NODE_ENV === "production"
+    || truthy(env.X402_REQUIRE_PAYMENT)
+    || Boolean(env.RAILWAY_ENVIRONMENT_ID)
+    || Boolean(env.RAILWAY_ENVIRONMENT_NAME)
+    || Boolean(env.RAILWAY_PROJECT_ID)
+    || Boolean(env.RAILWAY_SERVICE_ID);
 }
 
 export function buildRouteConfig({ publicBaseUrl, services, payTo, network = "eip155:196", timeoutSeconds = 300 }) {

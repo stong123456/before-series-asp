@@ -168,23 +168,6 @@ a:focus-visible {
   font-size: 18px;
 }
 
-.copy-status {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  padding: 4px 8px;
-  border-radius: 4px;
-  color: #fff;
-  background: var(--success);
-  font-size: 12px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.copy-status.is-visible {
-  opacity: 1;
-}
-
 .report-shell {
   width: min(1440px, 100%);
   margin: 0 auto;

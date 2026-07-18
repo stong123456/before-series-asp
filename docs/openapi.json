@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://<your-public-domain>"
+      "url": "https://before.stoneup.xyz"
     }
   ],
   "paths": {
@@ -343,7 +343,8 @@
             "additionalProperties": true
           },
           "cardText": {
-            "type": "string"
+            "type": "string",
+            "description": "Ready-to-display card text ending with the temporary web report URL."
           },
           "reportUrl": {
             "type": "string",

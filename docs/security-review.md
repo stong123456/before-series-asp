@@ -6,7 +6,7 @@
 |---|---|
 | Name | Before Series ASP |
 | Provider | Independent developer deployment |
-| URL | Pending dedicated production domain |
+| URL | https://before.stoneup.xyz |
 | Type | Public A2MCP HTTP API with x402 payment |
 | Trust tier | New independent service; maximum launch-time scrutiny is appropriate |
 
@@ -48,7 +48,7 @@
 | Type | Manual Git commit and Railway deployment |
 | Silent code download | None |
 | Dependency lock | `package-lock.json` with `npm ci` in CI and deployment |
-| CI | Syntax check, 29 automated tests, and production dependency audit |
+| CI | Syntax check, 34 automated tests, production dependency audit, and public x402 verifier |
 
 ## Permissions Required
 
@@ -98,6 +98,16 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 5. Use a dedicated, least-privilege OKX API credential set for this deployment.
 6. Rotate credentials after any accidental disclosure and after changes in repository or hosting access.
 7. Re-run all tests, `npm audit --omit=dev`, public 402 verification, and one paid replay per endpoint before every listing update.
+
+## Launch Verification Snapshot
+
+- Public health: `200`, with payment and reports both ready.
+- Public unpaid verification: all three canonical endpoints return valid 0.01 USD₮0 x402 v2 challenges on X Layer.
+- Public challenge resource URLs: match `https://before.stoneup.xyz/api/before/{ape|sign|shill}` exactly.
+- MCP discovery: exposes only the three paid service descriptors and does not return a free full report.
+- Automated checks: 34 tests passed; production dependency audit reported zero known vulnerabilities.
+- Visual checks: desktop and 390 px mobile reports were inspected for all three services with no horizontal overflow.
+- Remaining launch requirement: record one real paid replay for each endpoint after the final deployment.
 
 ## Methodology Note
 

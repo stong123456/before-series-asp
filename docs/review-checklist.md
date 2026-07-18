@@ -37,13 +37,14 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] Network is `eip155:196`, scheme is `exact`, and amount is `10000` base units (0.01 USD₮0).
 - [ ] One real paid replay per endpoint returns HTTP 200 and `PAYMENT-RESPONSE`.
 - [ ] There is no alternate free endpoint that returns the full card.
+- [ ] Empty or invalid input returns a 4xx error before any payment challenge.
 
 ## Interaction
 
 - [ ] The service accepts `{ "content": "...", "lang": "auto" }` and `text/plain`.
 - [ ] Chinese input returns Chinese; English input returns English; explicit `zh`/`en` overrides work.
 - [ ] The Agent does not ask follow-up questions.
-- [ ] Each paid replay returns one `card` object and one ready-to-display `cardText`.
+- [ ] Each paid replay returns one `card` object and one ready-to-display `cardText` ending with the direct report URL.
 - [ ] Each paid replay returns a non-empty `reportUrl`; the report opens in both `?lang=zh` and `?lang=en`.
 - [ ] Report responses include restrictive CSP, `X-Robots-Tag: noindex`, and `Cache-Control: no-store`.
 - [ ] Railway has a persistent report volume and valid `REPORT_STORAGE_DIR` / `REPORT_ENCRYPTION_KEY` secrets.
@@ -65,7 +66,7 @@ npm ci
 npm run check
 npm test
 npm audit --omit=dev
-npm run verify:public -- https://your-public-domain.example
+npm run verify:public -- https://before.stoneup.xyz
 ```
 
 Only submit after every box above is complete and the three real paid replays have been recorded with timestamps and transaction hashes stored privately.

@@ -42,9 +42,7 @@ export function renderReportDocument(record, requestedLang = "auto") {
         <span aria-hidden="true">/</span>
         <a href="${canonicalPath}?lang=en"${lang === "en" ? " aria-current=\"page\"" : ""}>EN</a>
       </div>
-      <button type="button" data-copy-link aria-label="${labels.copyLink}" title="${labels.copyLink}"><i class="ph ph-link" aria-hidden="true"></i><span>${labels.copyLink}</span></button>
       <button type="button" data-print aria-label="${labels.print}" title="${labels.print}"><i class="ph ph-printer" aria-hidden="true"></i><span>${labels.print}</span></button>
-      <span class="copy-status" data-copy-status aria-live="polite"></span>
     </nav>
   </header>
 
@@ -214,7 +212,6 @@ function copy(lang) {
     expiresAt: "Expires",
     reportTools: "Report tools",
     language: "Language",
-    copyLink: "Copy link",
     print: "Print",
     retentionNotice: "Only the generated, redacted report is retained temporarily; the original request body is not stored separately.",
     expiryNotice: "This bearer-link report expires at {date}. Anyone with the link can view it before expiry."
@@ -224,7 +221,6 @@ function copy(lang) {
     expiresAt: "失效时间",
     reportTools: "报告工具",
     language: "语言",
-    copyLink: "复制链接",
     print: "打印报告",
     retentionNotice: "系统仅临时保存生成后的脱敏报告，不会单独保存原始请求正文。",
     expiryNotice: "此持有链接可查看的报告将在 {date} 失效；失效前任何获得链接的人都可以访问。"

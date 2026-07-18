@@ -32,7 +32,7 @@ Before Series is a lightweight bilingual preliminary-risk service for Web3 users
 
 Paste a project description, post, group message, campaign rule, website copy, contract address, or KOL recommendation and receive one pre-ape risk card. It lists the risk level, evidence-backed red flags, information gaps, the top three checks, and a safer next step. The service does not visit links or audit contracts and is for risk education and information organization only.
 
-**Endpoint:** `https://<your-domain>/api/before/ape`
+**Endpoint:** `https://before.stoneup.xyz/api/before/ape`
 
 ## Service 2
 
@@ -50,7 +50,7 @@ Paste a project description, post, group message, campaign rule, website copy, c
 
 Paste a wallet popup, signature request, approve, claim, mint, stake, bridge, or contract-interaction description and receive one pre-sign reminder card. It explains the visible interaction type, approval and asset risks, primary-wallet guidance, and fields that cannot be confirmed from the supplied text. It never connects a wallet, executes a transaction, or requests secrets, and it does not replace transaction simulation or contract auditing.
 
-**Endpoint:** `https://<your-domain>/api/before/sign`
+**Endpoint:** `https://before.stoneup.xyz/api/before/sign`
 
 ## Service 3
 
@@ -68,7 +68,7 @@ Paste a wallet popup, signature request, approve, claim, mint, stake, bridge, or
 
 Paste a Web3 post, promotional draft, campaign introduction, or collaboration copy and receive one pre-publish check card. It reviews advertising tone, AI-like phrasing, performance promises, FOMO, superlatives, and sponsorship-disclosure boundaries, then returns a more natural revision without adding new facts. The result is for copy editing and general risk awareness, not legal advice or project endorsement.
 
-**Endpoint:** `https://<your-domain>/api/before/shill`
+**Endpoint:** `https://before.stoneup.xyz/api/before/shill`
 
 ## Unified Tagline
 

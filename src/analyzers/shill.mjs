@@ -164,7 +164,7 @@ export function analyzeBeforeShill(rawInput, options = {}) {
   const overallScore = severe ? 1 : Math.max(1, Math.min(10, 10 - Math.ceil(riskScore / 2)));
   const optimized = severe
     ? tr(lang, "检测到疑似敏感凭证，系统未生成改写稿。请先删除秘密信息并更换可能泄露的凭证。", "A possible secret was detected, so no rewrite was generated. Remove the secret and rotate any credential that may have been exposed.")
-    : optimizeCopy(prepared.text, lang);
+    : optimizeCopy(prepared.text, lang, signals);
   const phrases = take(
     signals.map((signal) => `${tr(lang, signal.zh, signal.en)} ${tr(lang, "示例：", "Example: ")}“${signal.evidence}”`),
     3,
@@ -239,9 +239,20 @@ export function analyzeBeforeShill(rawInput, options = {}) {
   };
 }
 
-function optimizeCopy(text, lang) {
+function optimizeCopy(text, lang, signals = []) {
   const source = String(text);
   const sourceWasTruncated = source.length > MAX_REWRITTEN_CHARS * 2;
+  const ids = new Set(signals.map((signal) => signal.id));
+  const safeSentences = extractSaferSentences(source);
+  if (!safeSentences.length && ["guaranteed_profit", "direct_investment_call", "extreme_fomo"].some((id) => ids.has(id))) {
+    const fallback = tr(
+      lang,
+      "我正在了解这个项目，目前没有足够的可核验信息支持收益、名额或回报判断。参与前请先核对项目功能、官方规则、费用和风险，并根据自己的情况独立判断。",
+      "I am reviewing this project, but there is not enough verifiable information to support claims about returns, scarcity, or outcomes. Check the product, official rules, costs, and risks before making an independent decision."
+    );
+    const truncationNote = tr(lang, "[长文已截断，请分段检查后再发布]", "[Long draft truncated; review it in sections before publishing]");
+    return sourceWasTruncated ? `${fallback}\n${truncationNote}` : fallback;
+  }
   let output = source.slice(0, MAX_REWRITTEN_CHARS * 2);
   for (const replacement of REPLACEMENTS) {
     output = output.replace(replacement.pattern, lang === "en" ? replacement.en : replacement.zh);
@@ -326,14 +337,20 @@ function buildFactChecks(context, signals, lang) {
 }
 
 function identifyCoreInformation(text, lang) {
-  const sentences = String(text).split(/(?<=[。！？.!?])|\n+/).map((item) => item.trim()).filter(Boolean);
-  const safer = sentences.filter((sentence) => !RULES.some((rule) => rule.patterns.some((pattern) => pattern.test(sentence))));
-  const selected = (safer.length ? safer : sentences).slice(0, 3).map((sentence) => trimTo(sentence, lang === "zh" ? 72 : 120));
+  const selected = extractSaferSentences(text).slice(0, 3).map((sentence) => trimTo(sentence, lang === "zh" ? 72 : 120));
   return take(selected, 3, [
     tr(lang, "原文中的项目名称、功能和参与方式等可核验事实。", "Verifiable facts such as the project name, function, and participation method."),
     tr(lang, "原文已明确给出的时间、费用、条件或官方链接。", "Dates, fees, conditions, or official links explicitly present in the original."),
     tr(lang, "作者真实使用感受中不涉及收益承诺的部分。", "Authentic user experience that does not imply guaranteed returns.")
   ]);
+}
+
+function extractSaferSentences(text) {
+  return String(text)
+    .split(/(?<=[。！？.!?])|\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((sentence) => !RULES.some((rule) => rule.patterns.some((pattern) => pattern.test(sentence))));
 }
 
 function buildDirection(signals, lang) {

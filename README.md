@@ -10,6 +10,8 @@ Every service follows the same product rule: **one input, no follow-up questions
 
 The repository is designed for an independent Agent identity with its own code, configuration, endpoints, deployment, branding, and listing materials.
 
+The marketplace avatar is available at `assets/before-series-avatar-440.png` and is an opaque, square-cornered 440 x 440 PNG without text.
+
 ## Endpoints
 
 | Service | Method | Endpoint | Price |
@@ -34,7 +36,7 @@ JSON request:
 The response includes:
 
 - `card`: structured fields for Agent rendering.
-- `cardText`: ready-to-display bilingual plain text.
+- `cardText`: ready-to-display bilingual plain text ending with the web report link.
 - `assessment`: risk subject, evidence status, confidence, recommended decision, checked scope, and unverified scope.
 - `evidence`: matched signal IDs, weights, and short evidence snippets.
 - `reportUrl`: a required, unguessable temporary link to the styled bilingual HTML report.
@@ -64,7 +66,7 @@ Set these variables in the deployment secret manager:
 
 ```text
 NODE_ENV=production
-PUBLIC_BASE_URL=https://your-public-domain.example
+PUBLIC_BASE_URL=https://before.stoneup.xyz
 X402_ENABLED=true
 X402_REQUIRE_PAYMENT=true
 X402_PAY_TO=0xYourXLayerReceivingAddress
@@ -95,18 +97,20 @@ Never commit `.env`. Never paste credentials into issues, logs, screenshots, or 
 After deployment:
 
 ```bash
-npm run verify:public -- https://your-public-domain.example
+npm run verify:public -- https://before.stoneup.xyz
 ```
 
 The script verifies:
 
-1. `/health` returns `200`.
-2. All three unpaid `POST` requests return `402`.
-3. Every `402` response includes a decodable `PAYMENT-REQUIRED` header.
-4. The challenge uses x402 v2, X Layer, the exact endpoint URL, and a 0.01 payment amount.
-5. MCP discovery returns all three tools.
+1. `/health` returns `200` with payment and reports ready.
+2. Report assets use the restrictive report CSP.
+3. Empty input returns `400 INPUT_REQUIRED` before any payment challenge.
+4. All three valid unpaid `POST` requests return `402` with a decodable `PAYMENT-REQUIRED` header.
+5. Each challenge uses x402 v2, X Layer, the exact endpoint URL, and a 0.01 payment amount.
+6. Non-canonical paid-route aliases return `404`.
+7. MCP discovery returns all three tools.
 
-Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, the response includes a settlement response header and `reportUrl`, and each report link opens in Chinese and English.
+Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, `cardText` ends with the direct report URL, the response includes a settlement response header and `reportUrl`, and each report link opens in Chinese and English.
 
 ## Safety Model
 

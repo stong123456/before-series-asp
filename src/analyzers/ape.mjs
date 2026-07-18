@@ -165,6 +165,7 @@ export function analyzeBeforeApe(rawInput, options = {}) {
 
 function isInsufficient(prepared, signals) {
   if (signals.some((signal) => signal.weight >= 4)) return false;
+  if (signals.some((signal) => signal.weight >= 3) || signals.length >= 2) return false;
   const withoutAddresses = prepared.scanText.replace(/\b0x[a-f0-9]{40}\b/gi, "");
   const withoutUrls = withoutAddresses.replace(/https?:\/\/\S+/gi, "").replace(/[^\p{L}\p{N}]+/gu, "").trim();
   if (prepared.scanText.length < 60) return true;

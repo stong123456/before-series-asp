@@ -84,6 +84,13 @@ test("Before Ape never labels a bare contract address as low risk", () => {
   assert.match(result.card.oneLineConclusion, /insufficient/i);
 });
 
+test("Before Ape rates multiple visible red flags even when the input is short", () => {
+  const result = analyzeBeforeApe("限时空投，连接主钱包并授权 USDT，官方合作方暂未公布。", { lang: "zh" });
+  assert.equal(result.assessment.evidenceStatus.key, "textual_indicators");
+  assert.notEqual(result.risk.level, "insufficient");
+  assert.match(result.card.oneLineConclusion, /最值得注意/);
+});
+
 test("Before Sign distinguishes approval revocation from approval grant", () => {
   const result = analyzeBeforeSign(
     "setApprovalForAll(0x1111111111111111111111111111111111111111, false) to revoke NFT access on chainId 196",
@@ -132,6 +139,13 @@ test("Before Shill removes scarcity and trading calls from the publishable rewri
   assert.equal(result.risk.level, "high");
   assert.doesNotMatch(result.card.optimizedVersion, /guaranteed|100x|final\s+100|miss\s+out|buy\s+now|should\s+buy/i);
   assert.match(result.card.optimizedVersion, /Sponsored partnership with referral link/i);
+});
+
+test("Before Shill does not preserve or mechanically rewrite a draft made only of risky claims", () => {
+  const result = analyzeBeforeShill("这个项目绝对是百倍黑马，稳赚不赔，最后 100 个名额，闭眼冲！现在买入就能抓住财富密码。", { lang: "zh" });
+  assert.doesNotMatch(result.card.optimizedVersion, /百倍|稳赚|最后\s*100|闭眼冲|买入|财富密码|无法预先保证的结果黑马/);
+  assert.match(result.card.optimizedVersion, /没有足够的可核验信息/);
+  assert.ok(result.card.coreInformationToKeep.every((item) => !/百倍|稳赚|闭眼冲|买入|财富密码/.test(item)));
 });
 
 test("Before Shill checks sponsorship disclosure without claiming legal compliance", () => {

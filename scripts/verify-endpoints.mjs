@@ -22,6 +22,17 @@ assert(reportCss.status === 200, `Report stylesheet expected 200, received ${rep
 assert(/default-src 'none'/.test(reportCss.headers.get("content-security-policy") || ""), "Report assets must use the restrictive report CSP.");
 
 for (const service of services) {
+  const response = await fetchWithTimeout(`${baseUrl}${service.path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  }, 12_000);
+  assert(response.status === 400, `${service.key} invalid-input preflight expected 400, received ${response.status}.`);
+  const body = await response.json();
+  assert(body.code === "INPUT_REQUIRED", `${service.key} invalid-input preflight must return INPUT_REQUIRED.`);
+}
+
+for (const service of services) {
   const url = `${baseUrl}${service.path}`;
   const response = await fetchWithTimeout(url, {
     method: "POST",
@@ -38,7 +49,7 @@ for (const service of services) {
   const option = challenge.accepts[0];
   assert(option.scheme === "exact", `${service.key} scheme must be exact.`);
   assert(option.network === "eip155:196", `${service.key} network must be X Layer mainnet.`);
-  assert(option.amount === "10000", `${service.key} amount must be 10000 base units (0.01 USD₮0).`);
+  assert(option.amount === "10000", `${service.key} amount must be 10000 base units (0.01 USDt0).`);
   assert(/^0x[a-fA-F0-9]{40}$/.test(option.payTo || ""), `${service.key} payTo is invalid.`);
 }
 
@@ -59,7 +70,7 @@ for (const name of ["before_ape", "before_sign", "before_shill"]) {
   assert(tools.some((tool) => tool.name === name), `MCP discovery is missing ${name}.`);
 }
 
-console.log(`Verified ${baseUrl}: health, report assets, strict paid routes, three 0.01 USD₮0 x402 challenges, and MCP discovery are valid.`);
+console.log(`Verified ${baseUrl}: health, report assets, invalid-input preflight, strict paid routes, three 0.01 USDt0 x402 challenges, and MCP discovery are valid.`);
 
 function decodeBase64Json(value) {
   try {
