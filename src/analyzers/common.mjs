@@ -1,30 +1,55 @@
 import { createHash, randomUUID } from "node:crypto";
 
-export const ANALYSIS_VERSION = "before-series-1.0.0";
+export const ANALYSIS_VERSION = "before-series-2.0.0";
 export const MAX_INPUT_CHARS = 20_000;
+export const MAX_REWRITTEN_CHARS = 1_800;
 
+const SENSITIVE_PLACEHOLDER = "[SENSITIVE_CONTENT_REDACTED]";
 const SECRET_PATTERNS = [
   {
-    id: "seed_phrase_line",
-    pattern: /((?:seed\s*phrase|mnemonic|助记词)\s*[:=：-]\s*)[^\r\n]{3,300}/gi,
-    replacement: "$1[REDACTED]"
+    id: "seed_phrase",
+    pattern: /(?:["']?(?:seed\s*phrase|seedphrase|mnemonic|助记词)["']?\s*[:=：-]\s*["']?)(?:[a-z]{2,20}(?:[\s,;，；]+|\\n)){5,23}[a-z]{2,20}/giu
   },
   {
-    id: "private_key",
-    pattern: /\b(?:0x)?[a-f0-9]{64}\b/gi,
-    replacement: "[REDACTED_64_HEX]"
+    id: "labeled_private_key",
+    pattern: /(?:["']?(?:private\s*key|privatekey|secret\s*key|secretkey|私钥|密钥)["']?\s*[:=：-]\s*["']?)(?:0x)?[a-f0-9]{32,128}/giu
   },
   {
-    id: "labeled_secret",
-    pattern: /((?:private\s*key|secret\s*key|api\s*key|otp|verification\s*code|私钥|密钥|验证码)\s*[:=：-]\s*)[^\s,;，；]+/gi,
-    replacement: "$1[REDACTED]"
+    id: "private_key_hex",
+    pattern: /\b(?:0x)?[a-f0-9]{64}\b/giu
+  },
+  {
+    id: "private_key_wif",
+    pattern: /\b[5KL][1-9A-HJ-NP-Za-km-z]{49,51}\b/g
+  },
+  {
+    id: "secret_key_array",
+    pattern: /(?:["']?(?:secret\s*key|secretkey|private\s*key|privatekey)["']?\s*[:=：-]\s*)?\[(?:\s*\d{1,3}\s*,){31,127}\s*\d{1,3}\s*\]/giu
   },
   {
     id: "bearer_token",
-    pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/gi,
-    replacement: "Bearer [REDACTED]"
+    pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/giu
+  },
+  {
+    id: "labeled_api_secret",
+    pattern: /(?:["']?(?:api\s*key|apikey|api\s*secret|client\s*secret|access\s*token)["']?\s*[:=：-]\s*["']?)[A-Za-z0-9._~+/=-]{12,}/giu
+  },
+  {
+    id: "verification_code",
+    pattern: /(?:["']?(?:otp|verification\s*code|验证码)["']?\s*[:=：-]\s*["']?)[A-Za-z0-9-]{4,12}/giu
   }
 ];
+
+const RISK_LEVELS = ["low", "medium_low", "medium", "medium_high", "high", "severe"];
+const RISK_LABELS = {
+  insufficient: { zh: "信息不足", en: "Insufficient information" },
+  low: { zh: "低", en: "Low" },
+  medium_low: { zh: "中低", en: "Medium-low" },
+  medium: { zh: "中", en: "Medium" },
+  medium_high: { zh: "中高", en: "Medium-high" },
+  high: { zh: "高", en: "High" },
+  severe: { zh: "严重", en: "Severe" }
+};
 
 export function prepareInput(rawInput, explicitLang = "auto") {
   if (rawInput === null || rawInput === undefined) {
@@ -48,25 +73,38 @@ export function prepareInput(rawInput, explicitLang = "auto") {
   const redactions = [];
   for (const rule of SECRET_PATTERNS) {
     let matched = false;
-    redacted = redacted.replace(rule.pattern, (...args) => {
+    rule.pattern.lastIndex = 0;
+    redacted = redacted.replace(rule.pattern, () => {
       matched = true;
-      if (typeof rule.replacement === "function") return rule.replacement(...args);
-      return rule.replacement.replace("$1", args[1] || "");
+      return SENSITIVE_PLACEHOLDER;
     });
     if (matched) redactions.push(rule.id);
   }
 
-  const lang = normalizeLang(explicitLang, redacted);
+  const sensitiveDataDetected = redactions.length > 0;
+  const safeText = sensitiveDataDetected ? SENSITIVE_PLACEHOLDER : redacted;
+  const lang = normalizeLang(explicitLang, sensitiveDataDetected ? normalized.slice(0, 256) : safeText);
+  const scanText = normalizeForScan(safeText);
+
   return {
     originalLength: normalized.length,
-    text: redacted,
-    lower: redacted.normalize("NFKC").toLowerCase(),
+    text: safeText,
+    scanText,
+    lower: scanText.toLowerCase(),
     lang,
     redactions: [...new Set(redactions)],
-    urls: extractUrls(redacted),
-    addresses: extractAddresses(redacted),
-    hash: createHash("sha256").update(redacted).digest("hex")
+    sensitiveDataDetected,
+    urls: extractUrls(safeText),
+    addresses: extractAddresses(safeText),
+    hash: sensitiveDataDetected ? null : createHash("sha256").update(safeText).digest("hex")
   };
+}
+
+export function normalizeForScan(value) {
+  return String(value)
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ");
 }
 
 export function normalizeLang(value, text = "") {
@@ -102,9 +140,10 @@ export function collectSignals(text, rules) {
   for (const rule of rules) {
     let evidence = "";
     for (const pattern of rule.patterns) {
-      const match = String(text).match(pattern);
+      pattern.lastIndex = 0;
+      const match = pattern.exec(String(text));
       if (match) {
-        evidence = evidenceSnippet(text, match.index ?? 0, match[0].length);
+        evidence = evidenceSnippet(text, match.index, match[0].length);
         break;
       }
     }
@@ -121,13 +160,79 @@ export function evidenceSnippet(text, index, matchLength, maxLength = 96) {
   return snippet.slice(0, maxLength).replace(/[`\r\n]/g, " ");
 }
 
-export function riskFromScore(score, insufficient = false) {
-  if (insufficient) return { key: "insufficient", zh: "信息不足", en: "Insufficient information" };
-  if (score >= 11) return { key: "high", zh: "高", en: "High" };
-  if (score >= 7) return { key: "medium_high", zh: "中高", en: "Medium-high" };
-  if (score >= 4) return { key: "medium", zh: "中", en: "Medium" };
-  if (score >= 2) return { key: "medium_low", zh: "中低", en: "Medium-low" };
-  return { key: "low", zh: "低", en: "Low" };
+export function sensitiveExposureSignal(lang, id = "sensitive_exposure") {
+  return {
+    id,
+    weight: 20,
+    severity: "severe",
+    zh: "检测到疑似助记词、私钥、API 密钥或验证码，系统已停止回显原始内容。",
+    en: "A possible seed phrase, private key, API secret, or verification code was detected, and the original content is no longer echoed.",
+    evidence: tr(lang, "敏感内容已隐藏", "Sensitive content withheld")
+  };
+}
+
+export function publicEvidence(prepared, signals, count = 6) {
+  return signals.slice(0, count).map(({ id, weight, severity, evidence }) => ({
+    id,
+    weight,
+    ...(severity ? { severity } : {}),
+    evidence: prepared.sensitiveDataDetected ? "[REDACTED]" : evidence
+  }));
+}
+
+export function riskFromScore(score, options = {}) {
+  const config = typeof options === "boolean" ? { insufficient: options } : options;
+  if (config.severe) return riskLevel("severe");
+  if (config.insufficient) return riskLevel("insufficient");
+  let key = score >= 11 ? "high" : score >= 7 ? "medium_high" : score >= 4 ? "medium" : score >= 2 ? "medium_low" : "low";
+  if (config.minimum && RISK_LEVELS.indexOf(key) < RISK_LEVELS.indexOf(config.minimum)) key = config.minimum;
+  return riskLevel(key);
+}
+
+export function buildAssessment(lang, {
+  subjectZh,
+  subjectEn,
+  signals = [],
+  insufficient = false,
+  severe = false,
+  checked = [],
+  unverified = [],
+  decision
+}) {
+  const evidenceKey = severe ? "sensitive_data_detected" : insufficient ? "insufficient" : signals.length ? "textual_indicators" : "no_visible_indicators";
+  const confidenceKey = severe || signals.length >= 2 ? "high" : signals.length === 1 ? "medium" : "low";
+  const decisionKey = decision || (severe ? "stop" : insufficient || signals.some((signal) => signal.weight >= 4) ? "pause_and_verify" : "verify_before_action");
+  return {
+    subject: tr(lang, subjectZh, subjectEn),
+    evidenceStatus: labeledValue(lang, evidenceKey, {
+      sensitive_data_detected: ["已检测到敏感信息", "Sensitive data detected"],
+      insufficient: ["信息不足", "Insufficient information"],
+      textual_indicators: ["存在输入文本迹象，尚未外部核验", "Input-text indicators found; not externally verified"],
+      no_visible_indicators: ["未发现明显文本红旗，尚未外部核验", "No obvious text red flag found; not externally verified"]
+    }),
+    confidence: labeledValue(lang, confidenceKey, {
+      low: ["低", "Low"],
+      medium: ["中", "Medium"],
+      high: ["高", "High"]
+    }),
+    recommendedDecision: labeledValue(lang, decisionKey, {
+      stop: ["停止当前操作并处理风险", "Stop the current action and address the risk"],
+      pause_and_verify: ["暂停操作，完成关键核验", "Pause and complete key verification"],
+      verify_before_action: ["完成常规核验后再决定", "Complete standard verification before deciding"],
+      revise_before_publish: ["修改并核实后再发布", "Revise and verify before publishing"]
+    }),
+    checked: unique(checked),
+    unverified: unique(unverified)
+  };
+}
+
+function riskLevel(key) {
+  return { key, ...RISK_LABELS[key] };
+}
+
+function labeledValue(lang, key, labels) {
+  const [zh, en] = labels[key];
+  return { key, label: tr(lang, zh, en) };
 }
 
 export function tr(lang, zh, en) {
@@ -147,7 +252,7 @@ export function take(items, count, fallback = []) {
   return output.slice(0, count);
 }
 
-export function baseResult(service, prepared) {
+export function baseResult(service, prepared, assessment) {
   return {
     ok: true,
     service,
@@ -159,13 +264,18 @@ export function baseResult(service, prepared) {
       characters: prepared.originalLength,
       urlCount: prepared.urls.length,
       addressCount: prepared.addresses.length,
-      sensitiveDataRedacted: prepared.redactions.length > 0
+      sensitiveDataRedacted: prepared.sensitiveDataDetected,
+      ...(prepared.sensitiveDataDetected ? { sensitiveDataTypes: prepared.redactions } : {})
     },
+    assessment,
     scope: {
-      method: "static_text_review",
+      method: "static_preliminary_review",
       fetchedExternalLinks: false,
+      queriedOnchainData: false,
+      simulatedTransactions: false,
       executedInput: false,
-      securityCertification: false
+      securityCertification: false,
+      legalOpinion: false
     }
   };
 }

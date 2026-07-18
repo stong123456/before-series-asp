@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRouteConfig } from "../src/payment.mjs";
+import {
+  buildRouteConfig,
+  isPaidPath,
+  validateOkxBaseUrl,
+  validatePublicBaseUrl
+} from "../src/payment.mjs";
 
 test("payment config binds all methods to exact 0.01 X Layer resources", () => {
   const services = [
@@ -32,4 +37,21 @@ test("payment config binds all methods to exact 0.01 X Layer resources", () => {
       }]);
     }
   }
+});
+
+test("payment guard matches only canonical paid paths", () => {
+  const services = [{ path: "/api/before/ape" }];
+  assert.equal(isPaidPath({ method: "POST", path: "/api/before/ape" }, services), true);
+  assert.equal(isPaidPath({ method: "POST", path: "/api/before/ape/" }, services), false);
+  assert.equal(isPaidPath({ method: "POST", path: "/API/BEFORE/APE" }, services), false);
+  assert.equal(isPaidPath({ method: "PUT", path: "/api/before/ape" }, services), false);
+});
+
+test("production payment origins reject unsafe or ambiguous configuration", () => {
+  assert.equal(validatePublicBaseUrl("https://before.example", true), "https://before.example");
+  assert.throws(() => validatePublicBaseUrl("http://before.example", true), /HTTPS/);
+  assert.throws(() => validatePublicBaseUrl("https://before.example/path", true), /origin/);
+  assert.equal(validateOkxBaseUrl("https://web3.okx.com", true), "https://web3.okx.com");
+  assert.throws(() => validateOkxBaseUrl("https://example.com", true), /web3\.okx\.com/);
+  assert.throws(() => validateOkxBaseUrl("https://user:pass@web3.okx.com", true), /clean HTTPS origin/);
 });

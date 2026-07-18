@@ -1,4 +1,4 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,11 +7,19 @@ import { ANALYSIS_VERSION, InputError, normalizeLang } from "./analyzers/common.
 import { analyzeBeforeShill } from "./analyzers/shill.mjs";
 import { analyzeBeforeSign } from "./analyzers/sign.mjs";
 import { createPaymentLayer, isPaidPath } from "./payment.mjs";
+import { renderReportDocument, renderReportUnavailable } from "./reports/render.mjs";
+import { createReportStore } from "./reports/store.mjs";
+
+const sourceDir = fileURLToPath(new URL(".", import.meta.url));
+dotenv.config({ path: resolve(sourceDir, "../.env"), quiet: true });
 
 const app = express();
 const port = positiveInteger(process.env.PORT, 8790);
 const publicBaseUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`);
-const SERVICE_VERSION = "1.0.0";
+const SERVICE_VERSION = "2.0.0";
+const reportStore = await createReportStore();
+const reportAssetsDir = resolve(sourceDir, "reports/assets");
+const phosphorAssetsDir = resolve(sourceDir, "../node_modules/@phosphor-icons/web/src/regular");
 const SERVICES = [
   {
     key: "ape",
@@ -40,6 +48,8 @@ const SERVICES = [
 ];
 
 app.disable("x-powered-by");
+app.enable("case sensitive routing");
+app.enable("strict routing");
 app.set("trust proxy", 1);
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -52,9 +62,18 @@ app.use((_req, res, next) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT");
   res.setHeader("Access-Control-Expose-Headers", "PAYMENT-REQUIRED, PAYMENT-RESPONSE");
+  if (_req.path.startsWith("/reports/") || _req.path.startsWith("/report-assets/")) {
+    res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+  }
   if (_req.method === "OPTIONS") return res.status(204).end();
   return next();
 });
+app.use(createRateLimitMiddleware());
+app.use("/report-assets/icons", express.static(phosphorAssetsDir, { fallthrough: false, immutable: true, index: false, maxAge: "7d" }));
+app.use("/report-assets", express.static(reportAssetsDir, { fallthrough: false, immutable: true, index: false, maxAge: "1h" }));
 
 let paymentLayer;
 try {
@@ -89,7 +108,8 @@ app.get("/", (_req, res) => {
     endpoints: Object.fromEntries(SERVICES.map((service) => [service.key, `${publicBaseUrl}${service.path}`])),
     mcp: `${publicBaseUrl}/mcp`,
     health: `${publicBaseUrl}/health`,
-    payment: paymentLayer.status
+    payment: paymentLayer.status,
+    reports: { enabled: true, ttlHours: reportStore.ttlMs / 3_600_000, storage: reportStore.mode }
   });
 });
 
@@ -99,23 +119,30 @@ app.get("/health", (_req, res) => {
     ok: ready,
     service: "before-series",
     version: SERVICE_VERSION,
-    payment: paymentLayer.status.ready ? "ready" : paymentLayer.status.required ? "unavailable" : "disabled_in_development"
+    payment: paymentLayer.status.ready ? "ready" : paymentLayer.status.required ? "unavailable" : "disabled_in_development",
+    reports: "ready"
   });
 });
 
+app.get("/reports/:id", asyncRoute(async (req, res) => {
+  const lang = normalizeLang(req.query.lang || "auto");
+  const record = await reportStore.get(req.params.id);
+  res.type("html");
+  if (!record) return res.status(410).send(renderReportUnavailable(lang));
+  return res.send(renderReportDocument(record, req.query.lang));
+}));
+
 for (const service of SERVICES) {
   app.get(service.path, (req, res) => {
-    const lang = normalizeLang(req.query.lang || "auto", String(req.query.content || ""));
-    const input = req.query.content;
-    if (input) return handleAnalysis(service, input, lang, res);
+    const lang = normalizeLang(req.query.lang || "auto");
     return res.json(serviceUsage(service, lang));
   });
   app.head(service.path, (_req, res) => res.status(200).end());
-  app.post(service.path, (req, res) => {
+  app.post(service.path, asyncRoute(async (req, res) => {
     const lang = requestedLang(req);
     const input = extractInput(req.body);
     return handleAnalysis(service, input, lang, res);
-  });
+  }));
 }
 
 app.post("/mcp", async (req, res) => {
@@ -156,9 +183,26 @@ if (isDirectRun) {
   }
 }
 
-function handleAnalysis(service, input, lang, res) {
+async function handleAnalysis(service, input, lang, res) {
   try {
-    return res.json(service.analyzer(input, { lang }));
+    const primary = service.analyzer(input, { lang });
+    const alternateLanguage = primary.language === "en" ? "zh" : "en";
+    const alternate = service.analyzer(input, { lang: alternateLanguage });
+    const metadata = await reportStore.create({
+      primary,
+      variants: { [primary.language]: primary, [alternate.language]: alternate }
+    });
+    const reportUrl = `${publicBaseUrl}/reports/${metadata.id}`;
+    return res.json({
+      ...primary,
+      reportUrl,
+      report: {
+        url: reportUrl,
+        expiresAt: metadata.expiresAt,
+        access: "unguessable_bearer_link",
+        storedContent: "generated_redacted_report_only"
+      }
+    });
   } catch (error) {
     if (error instanceof InputError) {
       const message = lang === "en" ? error.enMessage : error.zhMessage;
@@ -166,6 +210,10 @@ function handleAnalysis(service, input, lang, res) {
     }
     throw error;
   }
+}
+
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
 function extractInput(body) {
@@ -202,7 +250,10 @@ function serviceUsage(service, lang) {
       content: lang === "en" ? "Paste one block of text to check." : "粘贴一段需要检查的内容。",
       lang: "zh | en | auto"
     },
-    behavior: lang === "en" ? "No follow-up questions. Returns one structured card." : "不追问，直接返回一张结构化检查卡。"
+    behavior: lang === "en" ? "No follow-up questions. POST content in the request body to receive one structured card." : "不追问。请通过 POST 请求体提交内容，直接返回一张结构化检查卡。",
+    assessmentBoundary: lang === "en"
+      ? "Static preliminary screening only; no external link fetch, on-chain query, transaction simulation, security certification, or legal opinion."
+      : "仅提供静态前置筛查；不访问外链、不查询链上状态、不模拟交易，不构成安全认证或法律意见。"
   };
 }
 
@@ -280,7 +331,18 @@ function errorPayload(code, message) {
 }
 
 function normalizeBaseUrl(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
+  const raw = String(value || "").trim();
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("PUBLIC_BASE_URL must be a valid absolute URL.");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("PUBLIC_BASE_URL must be a clean HTTP(S) origin without credentials, query, or fragment.");
+  }
+  if (parsed.pathname !== "/") throw new Error("PUBLIC_BASE_URL must not include a path.");
+  return parsed.origin;
 }
 
 function positiveInteger(value, fallback) {
@@ -302,6 +364,42 @@ function configureServerTimeouts(server) {
   server.requestTimeout = 45_000;
   server.keepAliveTimeout = 5_000;
   return server;
+}
+
+function createRateLimitMiddleware() {
+  const windowMs = positiveInteger(process.env.RATE_LIMIT_WINDOW_MS, 60_000);
+  const maxRequests = positiveInteger(process.env.RATE_LIMIT_MAX_REQUESTS, 120);
+  const maxEntries = positiveInteger(process.env.RATE_LIMIT_MAX_ENTRIES, 10_000);
+  const buckets = new Map();
+  let lastSweep = Date.now();
+
+  return (req, res, next) => {
+    if (req.method === "OPTIONS" || req.path === "/" || req.path === "/health") return next();
+    const now = Date.now();
+    if (now - lastSweep >= windowMs) {
+      for (const [key, bucket] of buckets) {
+        if (bucket.resetAt <= now) buckets.delete(key);
+      }
+      lastSweep = now;
+    }
+
+    const key = String(req.ip || req.socket.remoteAddress || "unknown");
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      if (buckets.size >= maxEntries) buckets.delete(buckets.keys().next().value);
+      bucket = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    res.setHeader("RateLimit-Limit", String(maxRequests));
+    res.setHeader("RateLimit-Remaining", String(Math.max(0, maxRequests - bucket.count)));
+    res.setHeader("RateLimit-Reset", String(Math.ceil(bucket.resetAt / 1000)));
+    if (bucket.count > maxRequests) {
+      res.setHeader("Retry-After", String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
+      return res.status(429).json(errorPayload("RATE_LIMITED", "Too many requests. Retry later."));
+    }
+    return next();
+  };
 }
 
 export { app };

@@ -15,6 +15,11 @@ assert(health.status === 200, `Health expected 200, received ${health.status}.`)
 const healthBody = await health.json();
 assert(healthBody.ok === true, "Health body must report ok=true.");
 assert(healthBody.payment === "ready", "Production health must report payment=ready.");
+assert(healthBody.reports === "ready", "Production health must report reports=ready.");
+
+const reportCss = await fetchWithTimeout(`${baseUrl}/report-assets/report.css`, {}, 12_000);
+assert(reportCss.status === 200, `Report stylesheet expected 200, received ${reportCss.status}.`);
+assert(/default-src 'none'/.test(reportCss.headers.get("content-security-policy") || ""), "Report assets must use the restrictive report CSP.");
 
 for (const service of services) {
   const url = `${baseUrl}${service.path}`;
@@ -37,6 +42,11 @@ for (const service of services) {
   assert(/^0x[a-fA-F0-9]{40}$/.test(option.payTo || ""), `${service.key} payTo is invalid.`);
 }
 
+for (const alias of ["/api/before/ape/", "/API/BEFORE/APE"]) {
+  const response = await fetchWithTimeout(`${baseUrl}${alias}`, { method: "POST" }, 12_000);
+  assert(response.status === 404, `Non-canonical paid alias ${alias} must return 404, received ${response.status}.`);
+}
+
 const mcpResponse = await fetchWithTimeout(`${baseUrl}/mcp`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -49,7 +59,7 @@ for (const name of ["before_ape", "before_sign", "before_shill"]) {
   assert(tools.some((tool) => tool.name === name), `MCP discovery is missing ${name}.`);
 }
 
-console.log(`Verified ${baseUrl}: health, three standard 0.01 USD₮0 x402 challenges, and MCP discovery are valid.`);
+console.log(`Verified ${baseUrl}: health, report assets, strict paid routes, three 0.01 USD₮0 x402 challenges, and MCP discovery are valid.`);
 
 function decodeBase64Json(value) {
   try {

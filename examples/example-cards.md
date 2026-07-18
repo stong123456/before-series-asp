@@ -1,6 +1,6 @@
 # Example Cards
 
-These are representative `cardText` outputs. Runtime metadata such as `requestId` and `requestHash` is omitted.
+These are representative `cardText` outputs. Runtime metadata such as `requestId` and `requestHash` is omitted. Every successful paid response also includes a required temporary `reportUrl` with Chinese and English HTML views.
 
 ## Before Ape
 

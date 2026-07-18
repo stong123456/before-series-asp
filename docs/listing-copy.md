@@ -6,11 +6,11 @@
 
 **Chinese description:**
 
-Before Series 是面向 Web3 普通用户和创作者的轻量检查工具。用户只需粘贴一段项目介绍、钱包签名内容或待发布文案，即可获得一张简洁的中英文风险检查卡。Before Ape 用于参与项目前识别红旗与信息缺口；Before Sign 用于签名和授权前解释可见权限风险；Before Shill 用于发布前检查广告味、AI 味、夸大表达与一般发布风险。一次输入，不追问，约三十秒看完。结果仅用于信息整理、风险教育和内容优化，不构成投资建议、安全认证或法律意见。
+Before Series 是面向 Web3 普通用户和创作者的轻量前置风险筛查工具。用户只需粘贴一段项目介绍、钱包签名内容或待发布文案，即可获得一张简洁的双语检查卡和临时网页报告链接。报告会区分评估对象、可见证据、判断置信度、建议动作与尚未核验范围。Before Ape 用于参与项目前识别红旗与信息缺口；Before Sign 用于签名和授权前解释可见权限风险；Before Shill 用于发布前检查广告味、AI 味、夸大表达与一般发布风险。一次输入，不追问，约三十秒看完。结果仅用于信息整理、风险教育和内容优化，不构成投资建议、安全认证或法律意见。
 
 **English description:**
 
-Before Series is a lightweight bilingual check-card service for Web3 users and creators. Paste one block of project information, wallet-signature text, or draft copy and receive one concise card with observed signals, missing information, and practical next checks. Before Ape reviews pre-participation red flags, Before Sign explains visible signing and approval risks, and Before Shill checks advertising tone, AI-like wording, unsupported claims, and general publishing risk. One input, no follow-up questions, and a result designed to read in about 30 seconds. The service provides information organization, risk education, and copy editing only. It is not investment advice, a security certification, or legal advice.
+Before Series is a lightweight bilingual preliminary-risk service for Web3 users and creators. Paste one block of project information, wallet-signature text, or draft copy and receive one concise card plus a temporary web-report link. The report separates the risk subject, visible evidence, assessment confidence, recommended decision, and unverified scope. Before Ape reviews pre-participation red flags, Before Sign explains visible signing and approval risks, and Before Shill checks advertising tone, AI-like wording, unsupported claims, and general publishing risk. One input, no follow-up questions, and a result designed to read in about 30 seconds. The service provides information organization, risk education, and copy editing only. It is not investment advice, a security certification, or legal advice.
 
 **Type:** A2MCP
 
@@ -88,5 +88,5 @@ Paste a Web3 post, promotional draft, campaign introduction, or collaboration co
 - An unpaid request returns HTTP `402` with a standard `PAYMENT-REQUIRED` x402 v2 header.
 - Payment uses the official OKX Payment SDK on X Layer.
 - Each service costs exactly 0.01 USD₮0 per call.
-- Paid replay returns one structured JSON card without follow-up interaction.
+- Paid replay returns one structured JSON card and a required temporary bilingual HTML `reportUrl` without follow-up interaction.
 - Chinese and English are supported with `lang: zh`, `lang: en`, or automatic detection.

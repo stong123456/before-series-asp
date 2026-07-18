@@ -44,6 +44,9 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] Chinese input returns Chinese; English input returns English; explicit `zh`/`en` overrides work.
 - [ ] The Agent does not ask follow-up questions.
 - [ ] Each paid replay returns one `card` object and one ready-to-display `cardText`.
+- [ ] Each paid replay returns a non-empty `reportUrl`; the report opens in both `?lang=zh` and `?lang=en`.
+- [ ] Report responses include restrictive CSP, `X-Robots-Tag: noindex`, and `Cache-Control: no-store`.
+- [ ] Railway has a persistent report volume and valid `REPORT_STORAGE_DIR` / `REPORT_ENCRYPTION_KEY` secrets.
 - [ ] Empty, malformed, and oversized input returns a fast 4xx error, never a timeout.
 
 ## Safety Claims

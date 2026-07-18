@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Before Series ASP API",
-    "version": "1.0.0",
-    "description": "Bilingual one-input, one-card Web3 checks protected by OKX Agent Payments Protocol. Each paid endpoint costs 0.01 USD₮0."
+    "version": "2.0.0",
+    "description": "Bilingual one-input Web3 preliminary risk checks protected by OKX Agent Payments Protocol. Every successful paid check returns a structured card and a temporary HTML report link. Each endpoint costs 0.01 USD₮0."
   },
   "servers": [
     {
@@ -109,6 +109,31 @@
           }
         }
       }
+    },
+    "/reports/{id}": {
+      "get": {
+        "operationId": "getTemporaryReport",
+        "summary": "Open a temporary bilingual HTML report",
+        "description": "Possession of the unguessable report link grants read access until expiry. Reports are not indexed and are served with no-store and restrictive CSP headers.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{32}$" }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["zh", "en"] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Temporary HTML report" },
+          "410": { "description": "Invalid, expired, or unavailable report link" }
+        }
+      }
     }
   },
   "components": {
@@ -147,7 +172,7 @@
     },
     "responses": {
       "CardResult": {
-        "description": "One structured bilingual check card",
+        "description": "One structured bilingual check card and a required temporary HTML report link",
         "headers": {
           "PAYMENT-RESPONSE": {
             "description": "Settlement proof returned by OKX Payment SDK after a paid replay",
@@ -227,9 +252,12 @@
           "requestHash",
           "language",
           "risk",
+          "assessment",
           "scope",
           "card",
-          "cardText"
+          "cardText",
+          "reportUrl",
+          "report"
         ],
         "properties": {
           "ok": {
@@ -247,8 +275,11 @@
             "format": "uuid"
           },
           "requestHash": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "anyOf": [
+              { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              { "type": "null" }
+            ],
+            "description": "Null when sensitive data was detected, avoiding a brute-forceable hash of a short secret."
           },
           "language": {
             "enum": [
@@ -267,25 +298,42 @@
               "additionalProperties": true
             }
           },
+          "assessment": {
+            "type": "object",
+            "required": ["subject", "evidenceStatus", "confidence", "recommendedDecision", "checked", "unverified"],
+            "additionalProperties": true
+          },
           "scope": {
             "type": "object",
             "required": [
               "method",
               "fetchedExternalLinks",
               "executedInput",
-              "securityCertification"
+              "queriedOnchainData",
+              "simulatedTransactions",
+              "securityCertification",
+              "legalOpinion"
             ],
             "properties": {
               "method": {
-                "const": "static_text_review"
+                "const": "static_preliminary_review"
               },
               "fetchedExternalLinks": {
+                "const": false
+              },
+              "queriedOnchainData": {
+                "const": false
+              },
+              "simulatedTransactions": {
                 "const": false
               },
               "executedInput": {
                 "const": false
               },
               "securityCertification": {
+                "const": false
+              },
+              "legalOpinion": {
                 "const": false
               }
             }
@@ -296,6 +344,21 @@
           },
           "cardText": {
             "type": "string"
+          },
+          "reportUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Required temporary bearer-link HTML report URL."
+          },
+          "report": {
+            "type": "object",
+            "required": ["url", "expiresAt", "access", "storedContent"],
+            "properties": {
+              "url": { "type": "string", "format": "uri" },
+              "expiresAt": { "type": "string", "format": "date-time" },
+              "access": { "const": "unguessable_bearer_link" },
+              "storedContent": { "const": "generated_redacted_report_only" }
+            }
           }
         }
       },

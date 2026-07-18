@@ -6,7 +6,7 @@ Before Series is an independent bilingual A2MCP service for lightweight Web3 che
 - **Before Sign**: explains visible wallet-signature and approval risks before confirmation.
 - **Before Shill**: checks Web3 copy for advertising tone, AI-like phrasing, unsupported claims, and publishing risk.
 
-Every service follows the same product rule: **one input, no follow-up questions, one concise card**. Each paid call costs **0.01 USD₮0** through the **OKX Agent Payments Protocol** on X Layer.
+Every service follows the same product rule: **one input, no follow-up questions, one concise card and one temporary web report**. Each paid call costs **0.01 USD₮0** through the **OKX Agent Payments Protocol** on X Layer.
 
 The repository is designed for an independent Agent identity with its own code, configuration, endpoints, deployment, branding, and listing materials.
 
@@ -35,8 +35,12 @@ The response includes:
 
 - `card`: structured fields for Agent rendering.
 - `cardText`: ready-to-display bilingual plain text.
+- `assessment`: risk subject, evidence status, confidence, recommended decision, checked scope, and unverified scope.
 - `evidence`: matched signal IDs, weights, and short evidence snippets.
-- `scope`: explicit limits, including no link fetching, no code execution, and no security certification.
+- `reportUrl`: a required, unguessable temporary link to the styled bilingual HTML report.
+- `scope`: explicit limits, including no link fetching, on-chain query, transaction simulation, legal opinion, or security certification.
+
+The report styles are intentionally distinct: Before Ape uses a dark evidence desk, Before Sign uses a light audit dossier, and Before Shill uses an editorial action-prescription layout.
 
 ## Local Development
 
@@ -72,9 +76,17 @@ OKX_BASE_URL=https://web3.okx.com
 OKX_API_KEY=...
 OKX_SECRET_KEY=...
 OKX_PASSPHRASE=...
+REPORT_TTL_HOURS=24
+REPORT_MAX_ENTRIES=2000
+REPORT_STORAGE_DIR=/data/before-reports
+REPORT_ENCRYPTION_KEY=<32-byte base64 or 64-character hex key>
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX_REQUESTS=120
 ```
 
-The production server fails closed and refuses to start when the public HTTPS base URL, seller credentials, or receiving address is invalid. This prevents a deployment from appearing healthy while paid endpoints cannot return a valid payment challenge.
+Mount a persistent Railway volume at `/data` before production deployment. Generate the report encryption key locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`, then store it only in Railway variables. Losing or rotating this key makes existing report links unreadable by design.
+
+The production server fails closed and refuses to start when the public HTTPS base URL, seller credentials, receiving address, report storage directory, or report encryption key is invalid. This prevents a deployment from appearing healthy while paid endpoints cannot return a valid challenge and report link.
 
 Never commit `.env`. Never paste credentials into issues, logs, screenshots, or chat messages.
 
@@ -94,18 +106,22 @@ The script verifies:
 4. The challenge uses x402 v2, X Layer, the exact endpoint URL, and a 0.01 payment amount.
 5. MCP discovery returns all three tools.
 
-Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, and the response includes a settlement response header.
+Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, the response includes a settlement response header and `reportUrl`, and each report link opens in Chinese and English.
 
 ## Safety Model
 
 - User input is treated as untrusted data and is never executed.
 - Submitted URLs are not fetched, preventing server-side request forgery and deceptive redirects from being followed automatically.
 - Request bodies are not logged.
-- Likely private keys, seed labels, bearer tokens, and verification codes are redacted before analysis and never echoed in card evidence.
+- Likely private keys, seed phrases, secret-key arrays, API secrets, bearer tokens, and verification codes stop normal echoing and produce a fixed severe-risk response.
 - Input is limited to 20,000 characters; HTTP bodies are capped at 24 KB.
-- Risk labels describe observed text signals, not verified project or contract safety.
+- Fullwidth and zero-width obfuscation is normalized before signal matching.
+- Sparse project or signing input returns `insufficient`; absence of a keyword is never presented as verified safety.
+- Risk labels name the evaluated subject and separate observed text signals from confidence and unknown information.
 - Before Sign is a static explanation layer, not transaction simulation, bytecode analysis, AML screening, or a contract audit.
 - Before Shill provides general publishing-risk guidance, not jurisdiction-specific legal advice.
+- Temporary report IDs use 192 bits of randomness. Production reports are AES-256-GCM encrypted at rest, expire after 24 hours by default, are not indexed, and are served with restrictive CSP and no-store headers.
+- The original request body is not stored separately. The generated report necessarily retains redacted evidence and edited output until the temporary link expires.
 
 The threat-model structure is informed by publicly documented security-review principles, including SlowMist's agent security framework. This project is not affiliated with, endorsed by, audited by, or certified by SlowMist.
 

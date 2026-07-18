@@ -1,13 +1,13 @@
 {
   "name": "before-series-asp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Before Series bilingual A2MCP safety and publishing check cards for Web3 users.",
   "scripts": {
     "dev": "node src/server.mjs",
     "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs && node --check src/payment.mjs && node --check src/analyzers/common.mjs && node --check src/analyzers/ape.mjs && node --check src/analyzers/sign.mjs && node --check src/analyzers/shill.mjs && node --check scripts/verify-endpoints.mjs",
+    "check": "node --check src/server.mjs && node --check src/payment.mjs && node --check src/analyzers/common.mjs && node --check src/analyzers/ape.mjs && node --check src/analyzers/sign.mjs && node --check src/analyzers/shill.mjs && node --check src/reports/store.mjs && node --check src/reports/render.mjs && node --check src/reports/assets/report.js && node --check scripts/verify-endpoints.mjs",
     "test": "node --test --test-isolation=none test/*.test.mjs",
     "verify:public": "node scripts/verify-endpoints.mjs"
   },
@@ -18,6 +18,7 @@
     "@okxweb3/x402-core": "0.1.0",
     "@okxweb3/x402-evm": "0.2.1",
     "@okxweb3/x402-express": "0.1.1",
+    "@phosphor-icons/web": "2.1.2",
     "dotenv": "17.4.2",
     "express": "4.22.2"
   }

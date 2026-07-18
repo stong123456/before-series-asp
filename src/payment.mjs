@@ -4,11 +4,12 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
   const required = truthy(process.env.X402_REQUIRE_PAYMENT) || process.env.NODE_ENV === "production";
   const payTo = String(process.env.X402_PAY_TO || process.env.PAY_TO_ADDRESS || "").trim();
   const enabled = truthy(process.env.X402_ENABLED) || Boolean(payTo);
+  const network = process.env.X402_NETWORK || "eip155:196";
   const status = {
     required,
     enabled,
     ready: false,
-    network: process.env.X402_NETWORK || "eip155:196",
+    network,
     price: `$${PRICE_USD}`
   };
 
@@ -18,9 +19,8 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
   }
 
   if (!/^0x[a-fA-F0-9]{40}$/.test(payTo)) throw new Error("X402_PAY_TO must be a valid EVM address.");
-  if (!publicBaseUrl || !/^https:\/\//i.test(publicBaseUrl)) {
-    if (required) throw new Error("PUBLIC_BASE_URL must be a public HTTPS URL in production.");
-  }
+  validatePublicBaseUrl(publicBaseUrl, required);
+  if (required && network !== "eip155:196") throw new Error("Production X402_NETWORK must be X Layer mainnet (eip155:196).");
 
   const apiKey = process.env.OKX_API_KEY || "";
   const secretKey = process.env.OKX_SECRET_KEY || "";
@@ -37,7 +37,7 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
     apiKey,
     secretKey,
     passphrase,
-    baseUrl: process.env.OKX_BASE_URL || "https://web3.okx.com",
+    baseUrl: validateOkxBaseUrl(process.env.OKX_BASE_URL || "https://web3.okx.com", required),
     syncSettle: process.env.OKX_SYNC_SETTLE === undefined ? true : truthy(process.env.OKX_SYNC_SETTLE)
   });
   const resourceServer = new x402ResourceServer(facilitatorClient);
@@ -90,6 +90,36 @@ export function buildRouteConfig({ publicBaseUrl, services, payTo, network = "ei
 
 export function isPaidPath(req, services) {
   return ["GET", "HEAD", "POST"].includes(req.method) && services.some((service) => service.path === req.path);
+}
+
+export function validatePublicBaseUrl(value, required = true) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ""));
+  } catch {
+    throw new Error("PUBLIC_BASE_URL must be a valid absolute URL.");
+  }
+  if (required && parsed.protocol !== "https:") throw new Error("PUBLIC_BASE_URL must use HTTPS in production.");
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
+    throw new Error("PUBLIC_BASE_URL must be an origin without credentials, path, query, or fragment.");
+  }
+  return parsed.origin;
+}
+
+export function validateOkxBaseUrl(value, required = true) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ""));
+  } catch {
+    throw new Error("OKX_BASE_URL must be a valid absolute URL.");
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
+    throw new Error("OKX_BASE_URL must be a clean HTTPS origin.");
+  }
+  if (required && parsed.origin !== "https://web3.okx.com") {
+    throw new Error("Production OKX_BASE_URL must be https://web3.okx.com.");
+  }
+  return parsed.origin;
 }
 
 function wrapPaymentRequiredResponse(res) {

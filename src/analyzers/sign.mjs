@@ -1,9 +1,12 @@
 import {
   baseResult,
+  buildAssessment,
   collectSignals,
   listText,
   prepareInput,
+  publicEvidence,
   riskFromScore,
+  sensitiveExposureSignal,
   take,
   tr,
   trimTo
@@ -12,21 +15,21 @@ import {
 const RULES = [
   {
     id: "secret_exposure",
-    weight: 11,
+    weight: 20,
     zh: "内容中出现或索取助记词、私钥、验证码等敏感信息。钱包交互不需要提交这些秘密。",
     en: "The content contains or requests a seed phrase, private key, or verification code. Wallet interactions do not require sharing these secrets.",
-    patterns: [/助记词|私钥|验证码|seed\s*phrase|mnemonic|private\s*key|verification\s*code|\botp\b/i]
+    patterns: [/(?:填写|输入|发送|粘贴|提交|提供).{0,16}(?:助记词|私钥|验证码)|(?:provide|enter|send|paste|submit|share).{0,24}(?:seed\s*phrase|mnemonic|private\s*key|verification\s*code|\botp\b)/i]
   },
   {
     id: "unlimited_approval",
-    weight: 6,
+    weight: 7,
     zh: "可能是无限额度授权，授权对象未来可能持续动用对应代币。",
     en: "This may be an unlimited token allowance, allowing the spender to keep using the approved token later.",
-    patterns: [/无限授权|最大额度|max(?:imum)?\s+(?:allowance|approval)|unlimited.{0,24}(?:allowance|approv)|2\s*\^\s*256|maxuint256|ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/i]
+    patterns: [/无限授权|最大额度|max(?:imum)?\s+(?:allowance|approval)|(?:approve|allowance).{0,32}(?:unlimited|max(?:imum)?)|unlimited.{0,32}(?:allowance|approv|spender|operator)|2\s*\^\s*256|maxuint256|ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff/i]
   },
   {
     id: "all_nft_approval",
-    weight: 6,
+    weight: 7,
     zh: "可能涉及 setApprovalForAll，操作方可管理该 NFT 合约下的全部资产。",
     en: "This may invoke setApprovalForAll, allowing an operator to manage every asset under that NFT contract.",
     patterns: [/setapprovalforall|全部\s*nft\s*授权|授权全部藏品|approve\s+all\s+nfts?/i]
@@ -40,7 +43,7 @@ const RULES = [
   },
   {
     id: "blind_signature",
-    weight: 5,
+    weight: 7,
     zh: "签名内容可能无法直接读懂或使用高风险盲签方式，当前文本不足以确认真实授权范围。",
     en: "The request may be opaque or use a higher-risk blind-signing method, so the actual authority cannot be confirmed from this text.",
     patterns: [/盲签|blind\s*sign|\beth_sign\b|unknown\s+message|无法解析|unrecognized\s+data|raw\s+message/i]
@@ -113,16 +116,44 @@ const RULES = [
 export function analyzeBeforeSign(rawInput, options = {}) {
   const prepared = prepareInput(rawInput, options.lang);
   const lang = prepared.lang;
-  const signals = collectSignals(prepared.text, RULES);
+  const revocation = !prepared.sensitiveDataDetected && detectApprovalRevocation(prepared.scanText);
+  let signals = prepared.sensitiveDataDetected
+    ? [sensitiveExposureSignal(lang)]
+    : collectSignals(prepared.scanText, RULES);
+  if (revocation) {
+    signals = signals.filter((signal) => !["all_nft_approval", "token_approval", "unlimited_approval"].includes(signal.id));
+    signals.push(revocationSignal(prepared.scanText, lang));
+    signals.sort((a, b) => b.weight - a.weight || a.id.localeCompare(b.id));
+  }
   const insufficient = isInsufficient(prepared, signals);
   const score = signals.reduce((sum, signal) => sum + signal.weight, 0);
-  const risk = riskFromScore(score, insufficient);
-  const interactionType = classifyInteraction(prepared.text, signals, lang);
+  const severe = prepared.sensitiveDataDetected;
+  const risk = riskFromScore(score, { insufficient, severe });
+  const interactionType = classifyInteraction(prepared.scanText, signals, revocation, lang);
+  const details = extractInteractionDetails(prepared, signals, revocation, lang);
   const warnings = buildWarnings(signals, lang);
   const firstSteps = buildFirstSteps(prepared, signals, lang);
   const unknowns = buildUnknowns(prepared, signals, lang);
   const explanation = buildExplanation(interactionType, signals, insufficient, lang);
-  const mainWallet = buildMainWalletAdvice(signals, insufficient, lang);
+  const mainWallet = buildMainWalletAdvice(signals, insufficient, score, lang);
+  const assessment = buildAssessment(lang, {
+    subjectZh: "当前可见签名、授权或交易提示中的资产权限风险",
+    subjectEn: "Asset-permission risk in the visible signature, approval, or transaction prompt",
+    signals,
+    insufficient,
+    severe,
+    decision: severe ? "stop" : insufficient || score >= 4 ? "pause_and_verify" : "verify_before_action",
+    checked: [
+      tr(lang, "交互类型、授权方向和高风险方法", "Interaction type, approval direction, and high-risk methods"),
+      tr(lang, "授权额度、spender/operator、接收方和有效期线索", "Allowance, spender/operator, recipient, and expiry indicators"),
+      tr(lang, "敏感凭证、盲签、Permit、代理、跨链和资产转移线索", "Secrets, blind signing, Permit, proxy, bridge, and asset-transfer indicators")
+    ],
+    unverified: [
+      tr(lang, "域名是否真实且与目标合约一致", "Whether the domain is authentic and matches the target contract"),
+      tr(lang, "链上合约源码、代理实现、管理员权限和地址风险标签", "On-chain source, proxy implementation, admin powers, and address risk labels"),
+      tr(lang, "完整 calldata、交易模拟结果和最终资产变化", "Complete calldata, simulation result, and final asset changes")
+    ]
+  });
   const safetyFloor = tr(
     lang,
     "不要提供助记词、私钥或验证码；不要在来源未确认的网站连接主钱包；签名前逐项核对域名、链、合约、接收方、授权对象、额度和金额。",
@@ -136,8 +167,14 @@ export function analyzeBeforeSign(rawInput, options = {}) {
 
   const card = {
     title: tr(lang, "Before Sign 签名前提醒卡", "Before Sign Pre-Sign Check Card"),
+    assessmentType: tr(lang, "静态签名前置风险筛查", "Static pre-sign risk screening"),
+    riskSubject: assessment.subject,
     interactionType,
     riskLevel: tr(lang, risk.zh, risk.en),
+    evidenceStatus: assessment.evidenceStatus.label,
+    confidence: assessment.confidence.label,
+    recommendedDecision: assessment.recommendedDecision.label,
+    permissionDetails: details,
     explanation,
     warnings,
     firstSteps,
@@ -148,22 +185,30 @@ export function analyzeBeforeSign(rawInput, options = {}) {
   };
 
   return {
-    ...baseResult("before-sign", prepared),
-    risk: { level: risk.key, score, observedSignalCount: signals.length },
-    evidence: signals.slice(0, 6).map(({ id, weight, evidence }) => ({ id, weight, evidence })),
+    ...baseResult("before-sign", prepared, assessment),
+    risk: {
+      subject: "visible_signature_and_asset_permissions",
+      level: risk.key,
+      score,
+      confidence: assessment.confidence.key,
+      observedSignalCount: signals.length
+    },
+    evidence: publicEvidence(prepared, signals, 6),
     card,
     cardText: renderCard(card, lang)
   };
 }
 
 function isInsufficient(prepared, signals) {
-  if (prepared.text.length < 12) return true;
-  if (prepared.addresses.length === 1 && prepared.text.replace(prepared.addresses[0], "").trim().length < 12) return true;
-  return signals.length === 0 && !/[{[(].{8,}[}\])]|0x[a-f0-9]{8,}|signature|transaction|签名|交易/i.test(prepared.text);
+  if (prepared.sensitiveDataDetected) return false;
+  if (prepared.scanText.length < 12) return true;
+  if (prepared.addresses.length === 1 && prepared.scanText.replace(prepared.addresses[0], "").trim().length < 12) return true;
+  return signals.length === 0 && !/[{[(].{8,}[}\])]|0x[a-f0-9]{8,}|signature|transaction|签名|交易/i.test(prepared.scanText);
 }
 
-function classifyInteraction(text, signals, lang) {
+function classifyInteraction(text, signals, revocation, lang) {
   const ids = new Set(signals.map((signal) => signal.id));
+  if (revocation) return tr(lang, "撤销授权", "Approval revocation");
   if (ids.has("asset_transfer")) return tr(lang, "转账", "Transfer");
   if (ids.has("bridge")) return tr(lang, "跨链 bridge", "Bridge");
   if (ids.has("stake_or_lock")) return tr(lang, "质押 stake", "Stake");
@@ -173,6 +218,75 @@ function classifyInteraction(text, signals, lang) {
   if (ids.has("login_signature")) return tr(lang, "登录签名", "Login signature");
   if (preparedContractLike(text)) return tr(lang, "合约交互", "Contract interaction");
   return tr(lang, "无法判断", "Unable to determine");
+}
+
+function detectApprovalRevocation(text) {
+  return /setapprovalforall\s*\([^)]*,\s*false\s*\)|\bapprove\s*\([^,]+,\s*(?:0|0x0+)\s*\)|撤销授权|取消授权|移除授权|\brevoke(?:d|s|ing)?\b|\brevocation\b/i.test(text);
+}
+
+function revocationSignal(text, lang) {
+  return {
+    id: "approval_revocation",
+    weight: 1,
+    severity: "informational",
+    zh: "文本显示这可能是撤销或归零现有授权，而不是新增授权。仍需确认 operator/spender 与目标资产。",
+    en: "The text suggests revoking or zeroing an existing approval rather than granting a new one. Verify the operator/spender and target asset.",
+    evidence: trimTo(text, 96)
+  };
+}
+
+function extractInteractionDetails(prepared, signals, revocation, lang) {
+  if (prepared.sensitiveDataDetected) {
+    return [
+      tr(lang, "授权方向：无法继续解析，敏感内容已隐藏", "Permission direction: parsing stopped; sensitive content withheld"),
+      tr(lang, "目标对象：未核验", "Target: unverified"),
+      tr(lang, "额度与有效期：未核验", "Allowance and expiry: unverified")
+    ];
+  }
+
+  const text = prepared.scanText;
+  const ids = new Set(signals.map((signal) => signal.id));
+  const method = firstMatch(text, [
+    /setapprovalforall/i,
+    /permit2?/i,
+    /safeTransferFrom/i,
+    /transferFrom/i,
+    /\bapprove\b/i,
+    /\btransfer\b/i,
+    /sign[- ]?in\s+with\s+ethereum|\bsiwe\b/i,
+    /\b(?:claim|mint|stake|bridge)\b/i
+  ]);
+  const chain = displayChain(firstCaptured(text, /(?:chain\s*id|chainid|链\s*id)\s*[:=：]?\s*([0-9]{1,10})/i))
+    || firstMatch(text, [/x\s*layer/i, /ethereum/i, /arbitrum/i, /base/i, /bsc|bnb\s*chain/i, /solana/i]);
+  const labeledTarget = firstCaptured(text, /(?:spender|operator|recipient|verifyingcontract|授权对象|接收地址|目标合约)\s*[:=：]?\s*(0x[a-f0-9]{40})/i);
+  const target = labeledTarget || prepared.addresses[0];
+  const amount = ids.has("unlimited_approval")
+    ? tr(lang, "无限或最大额度", "Unlimited or maximum")
+    : firstCaptured(text, /(?:amount|allowance|value|额度|金额)\s*[:=：]?\s*([0-9][0-9.,]*(?:\s*[A-Za-z]{2,10})?)/i);
+  const expiry = firstCaptured(text, /(?:deadline|expiry|expiration|expires?|有效期|截止时间)\s*[:=：]?\s*([^,;，；\n]{1,40})/i);
+  const direction = revocation
+    ? tr(lang, "撤销或归零", "Revoke or zero")
+    : ids.has("token_approval") || ids.has("permit") || ids.has("all_nft_approval")
+      ? tr(lang, "新增或扩大权限", "Grant or expand permission")
+      : tr(lang, "无法确认", "Unknown");
+
+  return [
+    tr(lang, `授权方向：${direction}`, `Permission direction: ${direction}`),
+    tr(lang, `方法与目标：${method || "未识别"} / ${target || "未提供"}`, `Method and target: ${method || "Not identified"} / ${target || "Not supplied"}`),
+    tr(lang, `网络、额度、有效期：${chain || "未提供"} / ${amount || "未提供"} / ${expiry || "未提供"}`, `Network, allowance, expiry: ${chain || "Not supplied"} / ${amount || "Not supplied"} / ${expiry || "Not supplied"}`)
+  ];
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = String(text).match(pattern);
+    if (match) return match[0];
+  }
+  return "";
+}
+
+function firstCaptured(text, pattern) {
+  return String(text).match(pattern)?.[1]?.trim() || "";
 }
 
 function preparedContractLike(text) {
@@ -223,11 +337,28 @@ function buildExplanation(interactionType, signals, insufficient, lang) {
   return trimTo(tr(lang, `当前内容接近“${interactionType}”。${signals[0].zh}`, `The closest visible interaction type is ${interactionType}. ${signals[0].en}`), lang === "zh" ? 100 : 180);
 }
 
-function buildMainWalletAdvice(signals, insufficient, lang) {
+function buildMainWalletAdvice(signals, insufficient, score, lang) {
   const ids = new Set(signals.map((signal) => signal.id));
   if (ids.has("secret_exposure")) return tr(lang, "不适合继续交互。若主钱包秘密已经暴露，应优先迁移资产并停用旧钱包。", "Do not continue. If a primary-wallet secret was exposed, prioritize asset migration and retire the old wallet.");
-  if (insufficient || ids.has("unlimited_approval") || ids.has("all_nft_approval") || ids.has("blind_signature") || ids.has("asset_transfer")) return tr(lang, "当前不建议直接使用主钱包。先取消并补足核验，必要时使用资产隔离的小额钱包。", "Do not use a primary wallet yet. Cancel, complete verification, and use a low-value isolated wallet if interaction remains necessary.");
+  const elevatedPermission = ["unlimited_approval", "all_nft_approval", "blind_signature", "asset_transfer", "permit", "token_approval", "proxy_or_delegate", "bridge", "stake_or_lock"]
+    .some((id) => ids.has(id));
+  if (insufficient || score >= 4 || elevatedPermission) return tr(lang, "当前不建议直接使用主钱包。先取消并补足域名、链、目标合约、授权对象、额度与有效期核验；确需继续时，使用与主要资产隔离的小额钱包。", "Do not use a primary wallet yet. Cancel and verify the domain, chain, target contract, spender, allowance, and expiry. If interaction remains necessary, use a low-value wallet isolated from primary assets.");
   return tr(lang, "即使风险等级较低，也应先核对域名、合约、授权范围和资产变化；主钱包只承担已经完全看懂的最小权限。", "Even at a lower risk level, verify the domain, contract, permissions, and asset changes. A primary wallet should accept only the minimum permission you fully understand.");
+}
+
+function displayChain(value) {
+  const chain = String(value || "").trim();
+  const names = {
+    "1": "Ethereum",
+    "10": "Optimism",
+    "56": "BNB Smart Chain",
+    "137": "Polygon",
+    "196": "X Layer",
+    "8453": "Base",
+    "42161": "Arbitrum One",
+    "43114": "Avalanche C-Chain"
+  };
+  return names[chain] ? `${chain} (${names[chain]})` : chain;
 }
 
 function renderCard(card, lang) {
@@ -235,8 +366,16 @@ function renderCard(card, lang) {
   return [
     lang === "en" ? `[${card.title}]` : `【${card.title}】`,
     "",
+    `${tr(lang, "评估类型", "Assessment type")}${colon} ${card.assessmentType}`,
+    `${tr(lang, "评估对象", "Risk subject")}${colon} ${card.riskSubject}`,
     `${tr(lang, "交互类型", "Interaction type")}${colon} ${card.interactionType}`,
     `${tr(lang, "风险等级", "Risk level")}${colon} ${card.riskLevel}`,
+    `${tr(lang, "证据状态", "Evidence status")}${colon} ${card.evidenceStatus}`,
+    `${tr(lang, "判断置信度", "Assessment confidence")}${colon} ${card.confidence}`,
+    `${tr(lang, "建议动作", "Recommended decision")}${colon} ${card.recommendedDecision}`,
+    "",
+    `${tr(lang, "权限与交易字段", "Permission and transaction fields")}${colon}`,
+    listText(card.permissionDetails),
     "",
     `${tr(lang, "这次操作可能在做什么", "What this may do")}${colon}`,
     card.explanation,

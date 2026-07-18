@@ -19,7 +19,7 @@
 | Model | Remote seller credentials used only for OKX payment-facilitator authentication |
 | Storage | Railway secret variables in production; `.env` is ignored locally |
 | Rotation | Supported by rotating OKX credentials and redeploying |
-| User wallet keys | Never requested, stored, processed, or used by the service |
+| User wallet keys | Never requested, retained, or used. Accidental submissions are detected, withheld from output, and not hashed. |
 
 ### Human in the Loop
 
@@ -35,10 +35,10 @@
 | Field | Assessment |
 |---|---|
 | Data destination | User text is sent to the Before Series API only |
-| Third-party AI | None in version 1 |
+| Third-party AI | None in version 2 |
 | External URL retrieval | None |
 | Encryption | TLS required in production |
-| Retention | No database and no request-body logging in version 1 |
+| Retention | No original request-body logging or separate raw-input retention; temporary generated reports only |
 | Response cache | Disabled with `Cache-Control: no-store` |
 
 ### Update Mechanism
@@ -48,7 +48,7 @@
 | Type | Manual Git commit and Railway deployment |
 | Silent code download | None |
 | Dependency lock | `package-lock.json` with `npm ci` in CI and deployment |
-| CI | Syntax check, 13 automated tests, and production dependency audit |
+| CI | Syntax check, 29 automated tests, and production dependency audit |
 
 ## Permissions Required
 
@@ -58,8 +58,9 @@ The service requires:
 2. An X Layer receiving address.
 3. OKX seller API credentials stored as deployment secrets.
 4. Public HTTPS ingress to the three paid endpoints and free health/MCP discovery endpoints.
+5. A persistent report volume and a dedicated 32-byte report encryption key.
 
-It does not require browser cookies, wallet extensions, filesystem access to user data, shell execution, SSH keys, cloud credentials, or a database.
+It does not require browser cookies, wallet extensions, user-wallet authority, shell execution, SSH keys, cloud credentials, or a database. Production filesystem access is limited to the encrypted temporary-report directory.
 
 ## Worst Case If Compromised
 
@@ -77,6 +78,7 @@ It does not require browser cookies, wallet extensions, filesystem access to use
 | False positives | Keyword context can raise a warning for legitimate documentation that discusses a risky feature |
 | Live reputation | No live domain reputation, AML, audit, or contract-security feed is integrated |
 | Legal scope | Before Shill cannot determine jurisdiction-specific advertising, securities, or consumer-protection obligations |
+| Report links | Possession grants read access until expiry; users must treat a report URL as private unless public sharing is intended |
 | New-service trust | Production uptime, independent user feedback, and operational history must be established after launch |
 
 ## Risk and Verdict
@@ -89,7 +91,7 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 
 ## Recommended Restrictions
 
-1. Keep the current disclaimer and `scope` object in every response.
+1. Keep `assessment`, `scope`, `reportUrl`, evidence status, and confidence in every successful response.
 2. Never add definitive `safe`, `verified`, `certified`, or `compliant` verdicts.
 3. Never display a SlowMist/MistTrack/AML score without an authorized live integration and timestamped source.
 4. Keep user input out of application logs and error telemetry.
