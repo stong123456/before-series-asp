@@ -27,7 +27,7 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
   const passphrase = process.env.OKX_PASSPHRASE || "";
   if (!apiKey || !secretKey || !passphrase) throw new Error("OKX seller credentials are incomplete.");
 
-  const [{ paymentMiddleware }, { OKXFacilitatorClient, x402ResourceServer }, { ExactEvmScheme }] = await Promise.all([
+  const [{ paymentMiddleware, x402ResourceServer }, { OKXFacilitatorClient }, { ExactEvmScheme }] = await Promise.all([
     import("@okxweb3/x402-express"),
     import("@okxweb3/x402-core"),
     import("@okxweb3/x402-evm/exact/server")

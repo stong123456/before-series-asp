@@ -7,6 +7,19 @@ import {
   validatePublicBaseUrl
 } from "../src/payment.mjs";
 
+test("installed OKX SDK exposes the production payment constructors", async () => {
+  const [expressSdk, coreSdk, evmSdk] = await Promise.all([
+    import("@okxweb3/x402-express"),
+    import("@okxweb3/x402-core"),
+    import("@okxweb3/x402-evm/exact/server")
+  ]);
+
+  assert.equal(typeof expressSdk.paymentMiddleware, "function");
+  assert.equal(typeof expressSdk.x402ResourceServer, "function");
+  assert.equal(typeof coreSdk.OKXFacilitatorClient, "function");
+  assert.equal(typeof evmSdk.ExactEvmScheme, "function");
+});
+
 test("payment config binds all methods to exact 0.01 X Layer resources", () => {
   const services = [
     { path: "/api/before/ape", paymentDescription: "ape" },
