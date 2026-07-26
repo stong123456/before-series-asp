@@ -25,7 +25,8 @@
 
 | Operation | Control |
 |---|---|
-| Payment | Buyer Agent must show and obtain the user's required payment confirmation through OKX Agent Payments Protocol |
+| Input before payment | GET/HEAD are free; empty, placeholder, and invocation-only POST requests fail before x402; the Bazaar challenge declares required `body.content` |
+| Payment | Only a POST with actual content can reach x402; the Buyer Agent must then show and obtain the user's required payment confirmation through OKX Agent Payments Protocol |
 | Wallet action | Service cannot connect, sign, approve, or broadcast; the user keeps final authority |
 | High-risk result | Card recommends pausing or cancelling but never executes an action |
 | Publishing | Before Shill returns a draft; the user decides whether to publish |
@@ -48,7 +49,7 @@
 | Type | Manual Git commit and Railway deployment |
 | Silent code download | None |
 | Dependency lock | `package-lock.json` with `npm ci` in CI and deployment |
-| CI | Syntax check, 34 automated tests, production dependency audit, and public x402 verifier |
+| CI | Syntax check, 36 automated tests, production dependency audit, and public x402 verifier |
 
 ## Permissions Required
 
@@ -103,10 +104,12 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 
 - Public health: `200`, with payment and reports both ready.
 - Public invalid-input preflight: empty content returns `400 INPUT_REQUIRED` before any payment challenge.
+- Public intake verification: free GET usage works; placeholder and bare Agent-invocation requests return `paymentStarted: false` without a challenge.
 - Public unpaid verification: all three canonical endpoints return valid 0.01 USD₮0 x402 v2 challenges on X Layer.
+- Public input contract: each challenge declares a Bazaar POST JSON body with required `content`.
 - Public challenge resource URLs: match `https://before.stoneup.xyz/api/before/{ape|sign|shill}` exactly.
 - MCP discovery: exposes only the three paid service descriptors and does not return a free full report.
-- Automated checks: 34 tests passed; production dependency audit reported zero known vulnerabilities.
+- Automated checks: 36 tests passed; production dependency audit reported zero known vulnerabilities.
 - Visual checks: desktop and 390 px mobile reports were inspected for all three services with no horizontal overflow.
 - Remaining launch requirement: record one real paid replay for each endpoint after the final deployment.
 

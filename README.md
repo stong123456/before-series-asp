@@ -6,7 +6,7 @@ Before Series is an independent bilingual A2MCP service for lightweight Web3 che
 - **Before Sign**: explains visible wallet-signature and approval risks before confirmation.
 - **Before Shill**: checks Web3 copy for advertising tone, AI-like phrasing, unsupported claims, and publishing risk.
 
-Every service follows the same product rule: **one input, no follow-up questions, one concise card and one temporary web report**. Each paid call costs **0.01 USD₮0** through the **OKX Agent Payments Protocol** on X Layer.
+Every service follows the same product rule: **collect one required input before payment, then make one paid call with no further questions and return one concise card plus one temporary web report**. Each paid call costs **0.01 USD₮0** through the **OKX Agent Payments Protocol** on X Layer.
 
 The repository is designed for an independent Agent identity with its own code, configuration, endpoints, deployment, branding, and listing materials.
 
@@ -19,6 +19,7 @@ The marketplace avatar is available at `assets/before-series-avatar-440.png` and
 | Before Ape | `POST` | `/api/before/ape` | 0.01 USD₮0 |
 | Before Sign | `POST` | `/api/before/sign` | 0.01 USD₮0 |
 | Before Shill | `POST` | `/api/before/shill` | 0.01 USD₮0 |
+| Service usage | `GET` / `HEAD` | Any service endpoint above | Free; never starts payment |
 | MCP discovery | `POST` | `/mcp` | Free discovery only |
 | Health | `GET` | `/health` | Free |
 
@@ -32,6 +33,8 @@ JSON request:
 ```
 
 `lang` supports `auto`, `zh`, and `en`. The server also accepts plain-text request bodies and common input keys such as `text`, `input`, `message`, and `prompt`.
+
+`content` is mandatory **before** payment. Empty input, placeholder text, or a bare “use Agent / service / endpoint” invocation returns `400 INPUT_REQUIRED` with `paymentStarted: false` and a service-specific prompt. A valid unpaid request then returns the standard `402` challenge. The challenge includes the official Bazaar input declaration (`POST`, JSON body, required `content`) so a compatible buyer Agent can ask for missing content before showing payment confirmation.
 
 The response includes:
 
@@ -104,11 +107,12 @@ The script verifies:
 
 1. `/health` returns `200` with payment and reports ready.
 2. Report assets use the restrictive report CSP.
-3. Empty input returns `400 INPUT_REQUIRED` before any payment challenge.
-4. All three valid unpaid `POST` requests return `402` with a decodable `PAYMENT-REQUIRED` header.
-5. Each challenge uses x402 v2, X Layer, the exact endpoint URL, and a 0.01 payment amount.
-6. Non-canonical paid-route aliases return `404`.
-7. MCP discovery returns all three tools.
+3. Every service `GET` returns free usage instructions and never emits a payment challenge.
+4. Empty input and bare Agent-invocation text return `400 INPUT_REQUIRED` with `paymentStarted: false` before any payment challenge.
+5. All three valid unpaid `POST` requests return `402` with a decodable `PAYMENT-REQUIRED` header.
+6. Each challenge uses x402 v2, X Layer, the exact endpoint URL, a 0.01 payment amount, and a Bazaar schema requiring `body.content`.
+7. Non-canonical paid-route aliases return `404`.
+8. MCP discovery returns all three tools and refuses `tools/call` when actual content is absent.
 
 Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, `cardText` ends with the direct report URL, the response includes a settlement response header and `reportUrl`, and each report link opens in Chinese and English.
 

@@ -31,19 +31,23 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] Uses the official `@okxweb3/x402-*` packages.
 - [ ] `NODE_ENV=production`, `X402_ENABLED=true`, and `X402_REQUIRE_PAYMENT=true`.
 - [ ] Seller API key, secret key, passphrase, and X Layer receiving address are present only in Railway variables.
-- [ ] All three unpaid `POST` requests return HTTP 402 immediately.
+- [ ] `GET` and `HEAD` on every service endpoint return free usage information and never emit `PAYMENT-REQUIRED`.
+- [ ] All three unpaid `POST` requests with valid actual content return HTTP 402 immediately.
 - [ ] Every response includes `PAYMENT-REQUIRED` containing base64 x402 v2 JSON.
 - [ ] Resource URL exactly matches the service endpoint being called.
 - [ ] Network is `eip155:196`, scheme is `exact`, and amount is `10000` base units (0.01 USD₮0).
 - [ ] One real paid replay per endpoint returns HTTP 200 and `PAYMENT-RESPONSE`.
 - [ ] There is no alternate free endpoint that returns the full card.
 - [ ] Empty or invalid input returns a 4xx error before any payment challenge.
+- [ ] Bare Agent invocation text and placeholder content return `400 INPUT_REQUIRED` with `paymentStarted: false` and no payment challenge.
+- [ ] Every 402 challenge includes `extensions.bazaar.info.input` with `method=POST`, `bodyType=json`, and required `body.content`.
 
 ## Interaction
 
 - [ ] The service accepts `{ "content": "...", "lang": "auto" }` and `text/plain`.
 - [ ] Chinese input returns Chinese; English input returns English; explicit `zh`/`en` overrides work.
-- [ ] The Agent does not ask follow-up questions.
+- [ ] When content is missing, the Agent asks once for the service-specific required content before payment.
+- [ ] After actual content is supplied, the Agent asks no further questions and makes only one paid call.
 - [ ] Each paid replay returns one `card` object and one ready-to-display `cardText` ending with the direct report URL.
 - [ ] Each paid replay returns a non-empty `reportUrl`; the report opens in both `?lang=zh` and `?lang=en`.
 - [ ] Report responses include restrictive CSP, `X-Robots-Tag: noindex`, and `Cache-Control: no-store`.

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Before Series ASP API",
-    "version": "2.0.0",
-    "description": "Bilingual one-input Web3 preliminary risk checks protected by OKX Agent Payments Protocol. Every successful paid check returns a structured card and a temporary HTML report link. Each endpoint costs 0.01 USD₮0."
+    "version": "2.1.0",
+    "description": "Bilingual one-input Web3 preliminary risk checks protected by OKX Agent Payments Protocol. Required content is collected before payment. Every successful paid check returns a structured card and a temporary HTML report link. Each endpoint costs 0.01 USD₮0."
   },
   "servers": [
     {
@@ -25,10 +25,15 @@
       }
     },
     "/api/before/ape": {
+      "get": {
+        "summary": "Free Before Ape usage and input requirements",
+        "description": "Never starts payment. Callers must collect the user's actual project or activity content before POST.",
+        "responses": { "200": { "description": "Usage, required input, payment flow, and assessment boundary" } }
+      },
       "post": {
         "operationId": "beforeApe",
         "summary": "Generate a pre-ape risk check card",
-        "description": "Paste one project, campaign, social, or interaction description. No follow-up questions.",
+        "description": "Requires actual project, campaign, social, or interaction content before payment. After content exists, one paid call returns the result without further questions.",
         "requestBody": {
           "$ref": "#/components/requestBodies/CardInput"
         },
@@ -46,6 +51,11 @@
       }
     },
     "/api/before/sign": {
+      "get": {
+        "summary": "Free Before Sign usage and input requirements",
+        "description": "Never starts payment. Callers must collect the actual non-secret wallet prompt or interaction text before POST.",
+        "responses": { "200": { "description": "Usage, required input, payment flow, and assessment boundary" } }
+      },
       "post": {
         "operationId": "beforeSign",
         "summary": "Generate a wallet signing risk reminder card",
@@ -67,6 +77,11 @@
       }
     },
     "/api/before/shill": {
+      "get": {
+        "summary": "Free Before Shill usage and input requirements",
+        "description": "Never starts payment. Callers must collect the user's actual draft before POST.",
+        "responses": { "200": { "description": "Usage, required input, payment flow, and assessment boundary" } }
+      },
       "post": {
         "operationId": "beforeShill",
         "summary": "Generate a Web3 pre-publish copy check card",
@@ -190,7 +205,7 @@
         }
       },
       "InputError": {
-        "description": "Invalid, empty, malformed, or oversized input",
+        "description": "Invalid, empty, placeholder, invocation-only, malformed, or oversized input. Missing-content errors occur before payment and include paymentStarted=false plus the required input schema.",
         "content": {
           "application/json": {
             "schema": {
@@ -229,7 +244,8 @@
           "content": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 20000
+            "maxLength": 20000,
+            "description": "Actual user content to check. Agent invocation text, service metadata, endpoint URLs, and placeholders are not valid substitutes."
           },
           "lang": {
             "type": "string",
@@ -373,6 +389,19 @@
           "ok": {
             "const": false
           },
+          "paymentStarted": {
+            "type": "boolean",
+            "description": "False on missing-content preflight errors because x402 was not reached."
+          },
+          "requiredInput": {
+            "type": "object",
+            "description": "Present when content must be collected before payment.",
+            "additionalProperties": true
+          },
+          "nextAction": {
+            "type": "string",
+            "description": "Machine-readable guidance telling the caller to ask for content before payment."
+          },
           "error": {
             "type": "object",
             "required": [
@@ -395,7 +424,8 @@
         "required": [
           "x402Version",
           "resource",
-          "accepts"
+          "accepts",
+          "extensions"
         ],
         "properties": {
           "x402Version": {
@@ -420,6 +450,18 @@
                 "amount",
                 "payTo"
               ]
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "required": ["bazaar"],
+            "properties": {
+              "bazaar": {
+                "type": "object",
+                "description": "Declares a POST JSON input and a body schema whose content field is required.",
+                "required": ["info", "schema"],
+                "additionalProperties": true
+              }
             }
           }
         }

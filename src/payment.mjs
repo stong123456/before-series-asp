@@ -1,3 +1,6 @@
+import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
+import { createBazaarExtensions } from "./contracts.mjs";
+
 const PRICE_USD = "0.01";
 
 export async function createPaymentLayer({ publicBaseUrl, services }) {
@@ -42,6 +45,7 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
   });
   const resourceServer = new x402ResourceServer(facilitatorClient);
   resourceServer.register(status.network, new ExactEvmScheme());
+  resourceServer.registerExtension(bazaarResourceServerExtension);
   await withTimeout(
     resourceServer.initialize(),
     positiveInteger(process.env.X402_INIT_TIMEOUT_MS, 10_000),
@@ -79,26 +83,25 @@ export function isProductionRuntime(env = process.env) {
 export function buildRouteConfig({ publicBaseUrl, services, payTo, network = "eip155:196", timeoutSeconds = 300 }) {
   const routeConfig = {};
   for (const service of services) {
-    for (const method of ["GET", "HEAD", "POST"]) {
-      routeConfig[`${method} ${service.path}`] = {
-        accepts: [{
-          scheme: "exact",
-          network,
-          payTo,
-          price: `$${PRICE_USD}`,
-          maxTimeoutSeconds: timeoutSeconds
-        }],
-        resource: `${publicBaseUrl}${service.path}`,
-        description: service.paymentDescription,
-        mimeType: "application/json"
-      };
-    }
+    routeConfig[`POST ${service.path}`] = {
+      accepts: [{
+        scheme: "exact",
+        network,
+        payTo,
+        price: `$${PRICE_USD}`,
+        maxTimeoutSeconds: timeoutSeconds
+      }],
+      resource: `${publicBaseUrl}${service.path}`,
+      description: service.paymentDescription,
+      mimeType: "application/json",
+      extensions: createBazaarExtensions(service)
+    };
   }
   return routeConfig;
 }
 
 export function isPaidPath(req, services) {
-  return ["GET", "HEAD", "POST"].includes(req.method) && services.some((service) => service.path === req.path);
+  return req.method === "POST" && services.some((service) => service.path === req.path);
 }
 
 export function validatePublicBaseUrl(value, required = true) {

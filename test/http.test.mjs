@@ -124,6 +124,8 @@ test("GET never analyzes user content from a query string", async () => {
   assert.equal(body.method, "POST");
   assert.equal(body.card, undefined);
   assert.match(body.assessmentBoundary, /Static preliminary screening/);
+  assert.match(body.paymentFlow, /Collect the required content first/);
+  assert.equal(response.headers.get("payment-required"), null);
 });
 
 test("empty and malformed requests return bounded errors", async () => {
@@ -133,7 +135,11 @@ test("empty and malformed requests return bounded errors", async () => {
     body: JSON.stringify({ content: "" })
   });
   assert.equal(empty.status, 400);
-  assert.equal((await empty.json()).error.code, "INPUT_REQUIRED");
+  const emptyBody = await empty.json();
+  assert.equal(emptyBody.error.code, "INPUT_REQUIRED");
+  assert.equal(emptyBody.paymentStarted, false);
+  assert.deepEqual(emptyBody.requiredInput.schema.required, ["content"]);
+  assert.match(emptyBody.nextAction, /Do not initiate or confirm payment/);
 
   const malformed = await fetch(`${baseUrl}/api/before/shill?lang=en`, {
     method: "POST",
@@ -152,6 +158,43 @@ test("empty and malformed requests return bounded errors", async () => {
   assert.equal((await languageOnly.json()).error.code, "INPUT_REQUIRED");
 });
 
+test("service invocation boilerplate is rejected before payment", async () => {
+  const invocation = [
+    "我想使用 Agent 6656 提供的服务：",
+    "服务名称：Before Ape 冲前风险检查卡",
+    "服务类型：A2MCP",
+    `接口地址：${baseUrl}/api/before/ape`,
+    "请使用 OKX Agent Payments Protocol 向该接口发送请求。"
+  ].join("\n");
+  const response = await fetch(`${baseUrl}/api/before/ape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: invocation, lang: "zh" })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get("payment-required"), null);
+  assert.equal(body.paymentStarted, false);
+  assert.equal(body.error.code, "INPUT_REQUIRED");
+  assert.match(body.requiredInput.prompt, /请先粘贴/);
+
+  const placeholderResponse = await fetch(`${baseUrl}/api/before/ape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: `${invocation}\n检查内容：<粘贴项目介绍、推文或活动规则>`, lang: "zh" })
+  });
+  assert.equal(placeholderResponse.status, 400);
+  assert.equal((await placeholderResponse.json()).paymentStarted, false);
+
+  const actualContentResponse = await fetch(`${baseUrl}/api/before/ape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: `${invocation}\n检查内容：限时空投要求连接钱包并进行无限额度授权。`, lang: "zh" })
+  });
+  assert.equal(actualContentResponse.status, 200);
+  assert.equal((await actualContentResponse.json()).service, "before-ape");
+});
+
 test("MCP discovery returns descriptors, not free paid results", async () => {
   const response = await fetch(`${baseUrl}/mcp`, {
     method: "POST",
@@ -161,4 +204,33 @@ test("MCP discovery returns descriptors, not free paid results", async () => {
   const body = await response.json();
   assert.deepEqual(body.result.tools.map((tool) => tool.name), ["before_ape", "before_sign", "before_shill"]);
   assert.ok(body.result.tools.every((tool) => tool._meta.price === "0.01 USD₮0"));
+  assert.ok(body.result.tools.every((tool) => tool.inputSchema.required.includes("content")));
+  assert.ok(body.result.tools.every((tool) => /do not initiate payment/i.test(tool.description)));
+});
+
+test("MCP refuses to build a paid call until actual content exists", async () => {
+  const missing = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "before_ape", arguments: {} } })
+  });
+  const missingBody = await missing.json();
+  assert.equal(missingBody.error.code, -32602);
+  assert.equal(missingBody.error.data.paymentStarted, false);
+  assert.deepEqual(missingBody.error.data.required, ["content"]);
+
+  const valid = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "before_ape", arguments: { content: "Airdrop requires wallet approval.", lang: "en" } }
+    })
+  });
+  const validBody = await valid.json();
+  const descriptor = JSON.parse(validBody.result.content[0].text);
+  assert.equal(descriptor.body.content, "Airdrop requires wallet approval.");
+  assert.match(descriptor.instruction, /required content is present/i);
 });

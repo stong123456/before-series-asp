@@ -6,6 +6,7 @@ import { analyzeBeforeApe } from "./analyzers/ape.mjs";
 import { ANALYSIS_VERSION, InputError, normalizeLang, prepareInput } from "./analyzers/common.mjs";
 import { analyzeBeforeShill } from "./analyzers/shill.mjs";
 import { analyzeBeforeSign } from "./analyzers/sign.mjs";
+import { createContentInputSchema, isInvocationOnly } from "./contracts.mjs";
 import { createPaymentLayer, isPaidPath, isProductionRuntime } from "./payment.mjs";
 import { renderReportDocument, renderReportUnavailable } from "./reports/render.mjs";
 import { createReportStore } from "./reports/store.mjs";
@@ -20,7 +21,7 @@ if (productionRuntime && !String(process.env.PUBLIC_BASE_URL || "").trim()) {
   throw new Error("PUBLIC_BASE_URL is required in production.");
 }
 const publicBaseUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`);
-const SERVICE_VERSION = "2.0.0";
+const SERVICE_VERSION = "2.1.0";
 const reportStore = await createReportStore({ production: productionRuntime });
 const reportAssetsDir = resolve(sourceDir, "reports/assets");
 const phosphorAssetsDir = resolve(sourceDir, "../node_modules/@phosphor-icons/web/src/regular");
@@ -31,7 +32,16 @@ const SERVICES = [
     serviceName: { zh: "冲前风险检查卡", en: "Pre-Ape Risk Check Card" },
     path: "/api/before/ape",
     analyzer: analyzeBeforeApe,
-    paymentDescription: "Before Ape bilingual pre-participation Web3 risk check card."
+    inputPrompt: {
+      zh: "请先粘贴你准备参与的项目介绍、推文、活动规则、官网文案或合约地址；收到实际内容后才会进入付款确认。",
+      en: "First paste the actual project post, activity rules, website copy, or contract address you want checked. Payment confirmation starts only after content is supplied."
+    },
+    inputDescription: {
+      zh: "用户实际要检查的项目或活动内容。不得用 Agent 调用口令、服务名称或接口地址代替。",
+      en: "The actual project or activity content to assess. Ask the user for it before payment; never substitute the Agent invocation, service name, or endpoint."
+    },
+    inputExample: "Limited-time airdrop: connect your wallet and approve the contract to claim.",
+    paymentDescription: "Before Ape bilingual Web3 risk check. Requires the user's actual project or activity content in body.content before payment; ask for it first and never pay for an empty invocation."
   },
   {
     key: "sign",
@@ -39,7 +49,16 @@ const SERVICES = [
     serviceName: { zh: "钱包签名风险提醒", en: "Wallet Signature Risk Reminder" },
     path: "/api/before/sign",
     analyzer: analyzeBeforeSign,
-    paymentDescription: "Before Sign bilingual wallet signature and approval risk reminder card."
+    inputPrompt: {
+      zh: "请先粘贴钱包弹窗、签名内容、授权页面或交易提示；请勿发送助记词、私钥或验证码。收到实际内容后才会进入付款确认。",
+      en: "First paste the wallet prompt, signature text, approval page, or transaction notice. Never send a seed phrase, private key, or verification code. Payment confirmation starts only after content is supplied."
+    },
+    inputDescription: {
+      zh: "用户实际看到的钱包签名、授权或交易提示。不得用 Agent 调用口令代替，且不得要求助记词、私钥或验证码。",
+      en: "The actual wallet signature, approval, or transaction prompt. Ask for it before payment; never substitute the Agent invocation and never request seed phrases, private keys, or verification codes."
+    },
+    inputExample: "Approve unlimited USDt0 allowance to spender 0x1111111111111111111111111111111111111111.",
+    paymentDescription: "Before Sign bilingual wallet interaction risk reminder. Requires the user's actual signature, approval, or transaction text in body.content before payment; ask for it first and never request secrets."
   },
   {
     key: "shill",
@@ -47,7 +66,16 @@ const SERVICES = [
     serviceName: { zh: "Web3 推文发布前检查", en: "Web3 Pre-Publish Copy Check" },
     path: "/api/before/shill",
     analyzer: analyzeBeforeShill,
-    paymentDescription: "Before Shill bilingual Web3 copy and publishing risk check card."
+    inputPrompt: {
+      zh: "请先粘贴准备发布的推文、推广文案、活动介绍或合作内容；收到实际文案后才会进入付款确认。",
+      en: "First paste the actual tweet, promotion copy, activity introduction, or collaboration content you plan to publish. Payment confirmation starts only after content is supplied."
+    },
+    inputDescription: {
+      zh: "用户实际准备发布或合作审核的 Web3 文案。不得用 Agent 调用口令、服务名称或接口地址代替。",
+      en: "The actual Web3 copy the user plans to publish or review. Ask for it before payment; never substitute the Agent invocation, service name, or endpoint."
+    },
+    inputExample: "Guaranteed 100x returns. Buy now before the final allocation disappears!",
+    paymentDescription: "Before Shill bilingual Web3 pre-publish copy check. Requires the user's actual draft in body.content before payment; ask for it first and never pay for an empty invocation."
   }
 ];
 
@@ -93,14 +121,20 @@ app.use(express.text({ type: ["text/*", "application/x-www-form-urlencoded"], li
 
 app.use((req, res, next) => {
   if (req.method !== "POST" || !isPaidPath(req, SERVICES)) return next();
+  const service = SERVICES.find((item) => item.path === req.path);
   const lang = requestedLang(req);
   const input = extractInput(req.body);
+  if (isInvocationOnly(input)) {
+    const responseLang = lang === "auto" ? normalizeLang("auto", String(input).slice(0, 256)) : lang;
+    return res.status(400).json(inputRequiredPayload(service, responseLang));
+  }
   try {
     prepareInput(input, lang);
     return next();
   } catch (error) {
     if (!(error instanceof InputError)) return next(error);
     const responseLang = lang === "auto" ? normalizeLang("auto", String(input || "").slice(0, 256)) : lang;
+    if (error.code === "INPUT_REQUIRED") return res.status(error.status).json(inputRequiredPayload(service, responseLang));
     const message = responseLang === "zh" ? error.zhMessage : error.enMessage;
     return res.status(error.status).json(errorPayload(error.code, message));
   }
@@ -272,10 +306,13 @@ function serviceUsage(service, lang) {
     method: "POST",
     price: "0.01 USD₮0",
     input: {
-      content: lang === "en" ? "Paste one block of text to check." : "粘贴一段需要检查的内容。",
+      content: service.inputPrompt[lang] || service.inputPrompt.zh,
       lang: "zh | en | auto"
     },
-    behavior: lang === "en" ? "No follow-up questions. POST content in the request body to receive one structured card." : "不追问。请通过 POST 请求体提交内容，直接返回一张结构化检查卡。",
+    paymentFlow: lang === "en"
+      ? "Collect the required content first. Only then call this POST endpoint and show the payment confirmation. GET and HEAD are free usage discovery methods."
+      : "先收集必填内容，再调用此 POST 接口并展示付款确认。GET 与 HEAD 仅用于免费查看使用说明。",
+    behavior: lang === "en" ? "After content is provided, make one paid call and return one structured card without additional questions." : "用户提供内容后，只发起一次付费调用，不再追问，直接返回一张结构化检查卡。",
     assessmentBoundary: lang === "en"
       ? "Static preliminary screening only; no external link fetch, on-chain query, transaction simulation, security certification, or legal opinion."
       : "仅提供静态前置筛查；不访问外链、不查询链上状态、不模拟交易，不构成安全认证或法律意见。"
@@ -303,21 +340,14 @@ function handleMcp(message) {
       result: {
         tools: SERVICES.map((service) => ({
           name: `before_${service.key}`,
-          description: `${service.paymentDescription} Paid endpoint: ${publicBaseUrl}${service.path}`,
-          inputSchema: {
-            type: "object",
-            required: ["content"],
-            properties: {
-              content: { type: "string", minLength: 1, maxLength: 20000 },
-              lang: { type: "string", enum: ["auto", "zh", "en"], default: "auto" }
-            },
-            additionalProperties: false
-          },
+          description: `${service.paymentDescription} If content is missing, ask the user for it and do not initiate payment. Paid endpoint: ${publicBaseUrl}${service.path}`,
+          inputSchema: createContentInputSchema(service),
           _meta: {
             paidEndpoint: `${publicBaseUrl}${service.path}`,
             method: "POST",
             price: "0.01 USD₮0",
-            paymentProtocol: "OKX Agent Payments Protocol"
+            paymentProtocol: "OKX Agent Payments Protocol",
+            paymentPolicy: "Collect required content before initiating payment."
           }
         }))
       }
@@ -327,6 +357,18 @@ function handleMcp(message) {
     const key = String(message.params?.name || "").replace(/^before_/, "");
     const service = SERVICES.find((item) => item.key === key);
     if (!service) return jsonRpcError(message.id, -32602, "Unknown Before Series tool.");
+    const content = message.params?.arguments?.content;
+    if (typeof content !== "string" || !content.trim() || isInvocationOnly(content)) {
+      return jsonRpcError(message.id, -32602, "Actual content is required before payment. Ask the user to provide it first.", {
+        paymentStarted: false,
+        required: ["content"],
+        prompt: service.inputPrompt.en,
+        inputSchema: createContentInputSchema(service)
+      });
+    }
+    if (content.length > 20_000) {
+      return jsonRpcError(message.id, -32602, "Content must not exceed 20000 characters.", { paymentStarted: false });
+    }
     return {
       jsonrpc: "2.0",
       id: message.id,
@@ -336,9 +378,9 @@ function handleMcp(message) {
           text: JSON.stringify({
             paidEndpoint: `${publicBaseUrl}${service.path}`,
             method: "POST",
-            body: { content: message.params?.arguments?.content || "", lang: message.params?.arguments?.lang || "auto" },
+            body: { content, lang: message.params?.arguments?.lang || "auto" },
             price: "0.01 USD₮0",
-            instruction: "Send this request through OKX Agent Payments Protocol to receive the card."
+            instruction: "The required content is present. Show the payment confirmation, then send this exact request through OKX Agent Payments Protocol to receive the card."
           })
         }]
       }
@@ -347,12 +389,32 @@ function handleMcp(message) {
   return jsonRpcError(message.id, -32601, `Unknown method: ${message.method}`);
 }
 
-function jsonRpcError(id, code, message) {
-  return { jsonrpc: "2.0", id, error: { code, message } };
+function jsonRpcError(id, code, message, data) {
+  return { jsonrpc: "2.0", id, error: { code, message, ...(data === undefined ? {} : { data }) } };
 }
 
 function errorPayload(code, message) {
   return { ok: false, error: { code, message } };
+}
+
+function inputRequiredPayload(service, lang) {
+  const selectedLang = lang === "en" ? "en" : "zh";
+  return {
+    ok: false,
+    paymentStarted: false,
+    error: {
+      code: "INPUT_REQUIRED",
+      message: service.inputPrompt[selectedLang]
+    },
+    requiredInput: {
+      field: "content",
+      prompt: service.inputPrompt[selectedLang],
+      schema: createContentInputSchema(service)
+    },
+    nextAction: selectedLang === "en"
+      ? "Ask the user for the required content. Do not initiate or confirm payment yet."
+      : "请先向用户收集必填内容，此时不要发起或确认付款。"
+  };
 }
 
 function normalizeBaseUrl(value) {
