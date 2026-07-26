@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Before Series ASP API",
-    "version": "2.1.0",
-    "description": "Bilingual one-input Web3 preliminary risk checks protected by OKX Agent Payments Protocol. Required content is collected before payment. Every successful paid check returns a structured card and a temporary HTML report link. Each endpoint costs 0.01 USD₮0."
+    "version": "2.2.0",
+    "description": "Bilingual one-input Web3 preliminary risk checks protected by OKX Agent Payments Protocol. Required content is collected before payment. Every successful paid check returns a structured card and a temporary HTML report link that defaults to Chinese. Before Ape adds live OKX OnchainOS token screening when an EVM contract is supplied. Each endpoint costs 0.01 USD₮0."
   },
   "servers": [
     {
@@ -33,7 +33,7 @@
       "post": {
         "operationId": "beforeApe",
         "summary": "Generate a pre-ape risk check card",
-        "description": "Requires actual project, campaign, social, or interaction content before payment. After content exists, one paid call returns the result without further questions.",
+        "description": "Requires actual project, campaign, social, or interaction content before payment. After content exists, one paid call returns the result without further questions. If the input contains an EVM token contract, the response includes live OKX OnchainOS token search and advanced-risk indicators with an explicit preliminary-review boundary.",
         "requestBody": {
           "$ref": "#/components/requestBodies/CardInput"
         },
@@ -332,13 +332,13 @@
             ],
             "properties": {
               "method": {
-                "const": "static_preliminary_review"
+                "enum": ["static_preliminary_review", "static_text_and_live_token_screening"]
               },
               "fetchedExternalLinks": {
                 "const": false
               },
               "queriedOnchainData": {
-                "const": false
+                "type": "boolean"
               },
               "simulatedTransactions": {
                 "const": false
@@ -356,6 +356,11 @@
           },
           "card": {
             "type": "object",
+            "additionalProperties": true
+          },
+          "onchain": {
+            "type": "object",
+            "description": "Before Ape only. Time-stamped preliminary OKX OnchainOS token data, exact matches, risk tags, market indicators, and limitations.",
             "additionalProperties": true
           },
           "cardText": {

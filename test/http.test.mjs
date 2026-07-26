@@ -64,7 +64,7 @@ test("lang auto detects Chinese instead of forcing English", async () => {
   assert.match(result.cardText, /网页报告:/);
 });
 
-test("every successful check returns a bilingual temporary HTML report", async () => {
+test("every successful check returns a Chinese-default bilingual temporary HTML report", async () => {
   for (const service of ["ape", "sign", "shill"]) {
     const response = await fetch(`${baseUrl}/api/before/${service}`, {
       method: "POST",
@@ -83,14 +83,19 @@ test("every successful check returns a bilingual temporary HTML report", async (
     assert.match(report.headers.get("content-security-policy"), /default-src 'none'/);
     assert.match(report.headers.get("x-robots-tag"), /noindex/);
     const html = await report.text();
-    assert.match(html, new RegExp(`Before ${service[0].toUpperCase()}${service.slice(1)}`, "i"));
+    assert.match(html, /<html lang="zh"/);
+    assert.match(html, /判断置信度|报告编号/);
     assert.doesNotMatch(html, /data-copy-link|navigator\.clipboard/);
-    assert.match(html, /aria-label="Print"/);
-    if (service === "shill") assert.match(html, /Overall score/);
+    assert.match(html, /aria-label="打印报告"/);
+    if (service === "shill") assert.match(html, /整体评分/);
 
-    const chinese = await fetch(`${baseUrl}${reportPath}?lang=zh`);
-    assert.equal(chinese.status, 200);
-    assert.match(await chinese.text(), /判断置信度|报告编号/);
+    const english = await fetch(`${baseUrl}${reportPath}?lang=en`);
+    assert.equal(english.status, 200);
+    const englishHtml = await english.text();
+    assert.match(englishHtml, /<html lang="en"/);
+    assert.match(englishHtml, new RegExp(`Before ${service[0].toUpperCase()}${service.slice(1)}`, "i"));
+    assert.match(englishHtml, /aria-label="Print"/);
+    if (service === "shill") assert.match(englishHtml, /Overall score/);
   }
 });
 
@@ -107,7 +112,7 @@ test("report HTML escapes hostile content and expired-style links fail closed", 
 
   const missing = await fetch(`${baseUrl}/reports/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`);
   assert.equal(missing.status, 410);
-  assert.match(await missing.text(), /报告不可用|Report unavailable/);
+  assert.match(await missing.text(), /<html lang="zh".*报告不可用/s);
 });
 
 test("paid route aliases are rejected instead of bypassing exact path protection", async () => {

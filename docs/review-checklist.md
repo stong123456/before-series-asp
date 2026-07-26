@@ -49,7 +49,7 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] When content is missing, the Agent asks once for the service-specific required content before payment.
 - [ ] After actual content is supplied, the Agent asks no further questions and makes only one paid call.
 - [ ] Each paid replay returns one `card` object and one ready-to-display `cardText` ending with the direct report URL.
-- [ ] Each paid replay returns a non-empty `reportUrl`; the report opens in both `?lang=zh` and `?lang=en`.
+- [ ] Each paid replay returns a non-empty `reportUrl`; the bare URL opens in Chinese and `?lang=en` opens in English.
 - [ ] Report responses include restrictive CSP, `X-Robots-Tag: noindex`, and `Cache-Control: no-store`.
 - [ ] Railway has a persistent report volume and valid `REPORT_STORAGE_DIR` / `REPORT_ENCRYPTION_KEY` secrets.
 - [ ] Empty, malformed, and oversized input returns a fast 4xx error, never a timeout.
@@ -61,6 +61,8 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] Before Sign clearly states that static text review does not replace simulation, on-chain state review, or contract audit.
 - [ ] Before Shill clearly states that general publishing-risk guidance is not legal advice.
 - [ ] Before Ape clearly states that it does not provide investment advice or price prediction.
+- [ ] Before Ape with an EVM token contract returns a time-stamped OKX OnchainOS section; honeypot/high-risk tags raise the result, while timeout, no match, and missing tags never become a safety claim.
+- [ ] Before Ape clearly states that live token data does not replace bytecode/source audit, transaction simulation, sell testing, or AML investigation.
 - [ ] Seed phrases, private keys, verification codes, and bearer tokens are redacted and never echoed.
 
 ## Final Automated Checks

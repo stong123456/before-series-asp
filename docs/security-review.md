@@ -16,7 +16,7 @@
 
 | Field | Assessment |
 |---|---|
-| Model | Remote seller credentials used only for OKX payment-facilitator authentication |
+| Model | OKX credentials authenticate payment settlement and Before Ape token-data queries; dedicated least-privilege Market API credentials are supported |
 | Storage | Railway secret variables in production; `.env` is ignored locally |
 | Rotation | Supported by rotating OKX credentials and redeploying |
 | User wallet keys | Never requested, retained, or used. Accidental submissions are detected, withheld from output, and not hashed. |
@@ -35,9 +35,9 @@
 
 | Field | Assessment |
 |---|---|
-| Data destination | User text is sent to the Before Series API only |
+| Data destination | User text is sent to the Before Series API only. For Before Ape, the service sends only validated chain IDs and up to three public EVM contract addresses to fixed OKX OnchainOS token endpoints. |
 | Third-party AI | None in version 2 |
-| External URL retrieval | None |
+| External URL retrieval | Submitted user URLs are never fetched. Before Ape calls only hard-coded `https://web3.okx.com` Token API paths; redirects are rejected. |
 | Encryption | TLS required in production |
 | Retention | No original request-body logging or separate raw-input retention; temporary generated reports only |
 | Response cache | Disabled with `Cache-Control: no-store` |
@@ -49,13 +49,13 @@
 | Type | Manual Git commit and Railway deployment |
 | Silent code download | None |
 | Dependency lock | `package-lock.json` with `npm ci` in CI and deployment |
-| CI | Syntax check, 36 automated tests, production dependency audit, and public x402 verifier |
+| CI | Syntax check, 42 automated tests, production dependency audit, and public x402 verifier |
 
 ## Permissions Required
 
 The service requires:
 
-1. Network access to the OKX payment facilitator for payment verification and settlement.
+1. Network access to OKX for payment verification/settlement and Before Ape Token API lookups.
 2. An X Layer receiving address.
 3. OKX seller API credentials stored as deployment secrets.
 4. Public HTTPS ingress to the three paid endpoints and free health/MCP discovery endpoints.
@@ -75,9 +75,9 @@ It does not require browser cookies, wallet extensions, user-wallet authority, s
 
 | Item | Assessment |
 |---|---|
-| False negatives | Static text cannot reveal hidden calldata, proxy state, malicious bytecode, compromised frontends, or later project changes |
+| False negatives | Before Ape live token indicators and static text cannot reveal all hidden calldata, proxy/admin state, malicious bytecode, compromised frontends, actual sell outcomes, or later project changes |
 | False positives | Keyword context can raise a warning for legitimate documentation that discusses a risky feature |
-| Live reputation | No live domain reputation, AML, audit, or contract-security feed is integrated |
+| Live reputation | Before Ape integrates OKX token search and advanced token indicators. No live domain reputation, AML feed, bytecode audit, or transaction simulation is integrated. Missing or unavailable OKX data is never treated as evidence of safety. |
 | Legal scope | Before Shill cannot determine jurisdiction-specific advertising, securities, or consumer-protection obligations |
 | Report links | Possession grants read access until expiry; users must treat a report URL as private unless public sharing is intended |
 | New-service trust | Production uptime, independent user feedback, and operational history must be established after launch |
@@ -99,6 +99,7 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 5. Use a dedicated, least-privilege OKX API credential set for this deployment.
 6. Rotate credentials after any accidental disclosure and after changes in repository or hosting access.
 7. Re-run all tests, `npm audit --omit=dev`, public 402 verification, and one paid replay per endpoint before every listing update.
+8. Keep OKX Market calls bounded to validated public contract addresses, reject redirects and oversized responses, retain the fixed-origin allowlist, and preserve timeout/error fail-closed behavior.
 
 ## Launch Verification Snapshot
 
@@ -109,7 +110,7 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 - Public input contract: each challenge declares a Bazaar POST JSON body with required `content`.
 - Public challenge resource URLs: match `https://before.stoneup.xyz/api/before/{ape|sign|shill}` exactly.
 - MCP discovery: exposes only the three paid service descriptors and does not return a free full report.
-- Automated checks: 36 tests passed; production dependency audit reported zero known vulnerabilities.
+- Automated checks: 42 tests passed; production dependency audit reported zero known vulnerabilities.
 - Visual checks: desktop and 390 px mobile reports were inspected for all three services with no horizontal overflow.
 - Remaining launch requirement: record one real paid replay for each endpoint after the final deployment.
 

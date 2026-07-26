@@ -1,9 +1,9 @@
-const ASSET_VERSION = "2.0.2";
+const ASSET_VERSION = "2.2.0";
 
 export function renderReportDocument(record, requestedLang = "auto") {
   const variants = record.payload?.variants || {};
   const primary = record.payload?.primary;
-  const lang = requestedLang === "en" ? "en" : requestedLang === "zh" ? "zh" : primary?.language || "zh";
+  const lang = requestedLang === "en" ? "en" : "zh";
   const result = variants[lang] || primary;
   if (!result?.card || !result?.assessment) throw new Error("Report payload is incomplete.");
 
@@ -110,7 +110,7 @@ function renderSummaryMetrics(result, lang) {
 
 function renderApe(result, lang) {
   const card = result.card;
-  return `<div class="ape-layout">
+  return `${renderOnchainVerification(result.onchain, lang)}<div class="ape-layout">
     <div class="ape-main">
       ${sectionList(lang, "flag", "已观察到的红旗信号", "Observed red flags", card.mainRedFlags, "danger")}
       ${sectionList(lang, "question", "信息缺口", "Information gaps", card.informationGaps, "unknown")}
@@ -169,12 +169,141 @@ function numberedSection(lang, zhTitle, enTitle, items) {
 }
 
 function scopeSection(result, lang) {
-  const items = [
-    tr(lang, "未访问提交的链接", "Submitted links were not fetched"),
-    tr(lang, "未查询链上或地址信誉数据", "No on-chain or address-reputation query"),
-    tr(lang, "未模拟交易或审计合约", "No transaction simulation or contract audit")
-  ];
+  const items = result.scope?.queriedOnchainData
+    ? [
+        tr(lang, "未访问提交的网页链接", "Submitted web links were not fetched"),
+        tr(lang, "未进行合约字节码审计或交易模拟", "No contract bytecode audit or transaction simulation"),
+        tr(lang, "未进行资金流追踪或 AML 地址信誉调查", "No fund-flow tracing or AML address-reputation investigation")
+      ]
+    : result.scope?.onchainQueryAttempted
+      ? [
+          tr(lang, "本次未获得可用的链上代币核验结果", "No usable on-chain token verification result was obtained"),
+          tr(lang, "未访问提交的网页链接", "Submitted web links were not fetched"),
+          tr(lang, "未进行合约审计、交易模拟或 AML 地址调查", "No contract audit, transaction simulation, or AML address investigation")
+        ]
+      : [
+          tr(lang, "未访问提交的链接", "Submitted links were not fetched"),
+          tr(lang, "未查询链上或地址信誉数据", "No on-chain or address-reputation query"),
+          tr(lang, "未模拟交易或审计合约", "No transaction simulation or contract audit")
+        ];
   return `<section class="scope-section"><div class="section-heading"><i class="ph ph-prohibit" aria-hidden="true"></i><h2>${tr(lang, "本报告不包含", "Out of scope")}</h2></div><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`;
+}
+
+function renderOnchainVerification(onchain, lang) {
+  if (!onchain || onchain.status === "not_applicable") return "";
+  const matches = Array.isArray(onchain.matches) ? onchain.matches : [];
+  const status = onchainStatus(onchain.status, lang);
+  const records = matches.map((match) => {
+    const advanced = match.advanced || {};
+    const tags = Array.isArray(advanced.tokenTags) ? advanced.tokenTags : [];
+    const honeypot = tags.includes("honeypot");
+    const facts = [
+      [tr(lang, "OKX 风控等级", "OKX risk-control level"), riskControlLabel(advanced.riskControlLevel, lang)],
+      [tr(lang, "貔貅标签", "Honeypot tag"), honeypot ? tr(lang, "已标记", "Flagged") : tr(lang, "未返回，不等于安全", "Not returned; not proof of safety")],
+      [tr(lang, "流动性", "Liquidity"), formatUsd(match.liquidityUsd, lang)],
+      [tr(lang, "市值", "Market cap"), formatUsd(match.marketCapUsd, lang)],
+      [tr(lang, "持币地址", "Holders"), formatInteger(match.holders, lang)],
+      [tr(lang, "前 10 持仓", "Top-10 holdings"), formatPercentValue(advanced.top10HoldPercent, lang)],
+      [tr(lang, "开发者持仓", "Developer holdings"), formatPercentValue(advanced.devHoldingPercent, lang)],
+      [tr(lang, "可疑地址持仓", "Suspicious holdings"), formatPercentValue(advanced.suspiciousHoldingPercent, lang)]
+    ];
+    return `<article class="token-record${honeypot ? " token-record--danger" : ""}">
+      <header><div><span>${escapeHtml(match.chainName || match.chainIndex)}</span><h3>${escapeHtml(match.tokenSymbol || match.tokenName || shortAddress(match.tokenContractAddress))}</h3></div><code>${escapeHtml(shortAddress(match.tokenContractAddress))}</code></header>
+      <dl>${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>
+      <div class="token-tags"><span>${tr(lang, "已返回标签", "Returned tags")}</span>${tags.length ? tags.map((tag) => `<b class="token-tag${tag === "honeypot" || tag === "lowLiquidity" ? " token-tag--danger" : ""}">${escapeHtml(tokenTagLabel(tag, lang))}</b>`).join("") : `<em>${tr(lang, "无；标签缺失不能证明安全", "None; missing tags do not prove safety")}</em>`}</div>
+    </article>`;
+  }).join("");
+  const limitations = (onchain.limitations || []).map((item) => limitationLabel(item, lang));
+
+  return `<section class="onchain-verification" data-status="${escapeHtml(onchain.status)}">
+    <div class="section-heading onchain-heading"><i class="ph ph-database" aria-hidden="true"></i><h2>${tr(lang, "链上实时核验", "Live on-chain verification")}</h2><span class="verification-status">${escapeHtml(status)}</span></div>
+    <div class="verification-meta"><span><b>${tr(lang, "来源", "Source")}</b> ${escapeHtml(onchain.source?.name || "OKX OnchainOS Token API")}</span><span><b>${tr(lang, "核验时间", "Checked")}</b> ${escapeHtml(formatOnchainDate(onchain.queriedAt, lang))}</span></div>
+    ${records || `<div class="verification-empty"><i class="ph ph-warning" aria-hidden="true"></i><p>${tr(lang, "没有获得可用于判断的精确代币匹配。数据缺失不代表低风险，请独立确认链和合约地址。", "No exact token match was available for assessment. Missing data does not mean low risk; independently confirm the chain and contract address.")}</p></div>`}
+    <div class="verification-boundary"><strong>${tr(lang, "核验边界", "Verification boundary")}</strong><p>${tr(lang, "此处为 OKX OnchainOS 实时代币指标初筛，数据会变化，也可能存在延迟或覆盖缺口。它不替代合约源码与字节码审计、交易模拟或 AML 调查。", "This is preliminary live token screening from OKX OnchainOS. Data can change and may have indexing or coverage gaps. It does not replace source and bytecode audit, transaction simulation, or AML investigation.")}</p>${limitations.length ? `<ul>${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}</div>
+  </section>`;
+}
+
+function onchainStatus(status, lang) {
+  const labels = {
+    verified: ["核验完成", "Completed"],
+    partial: ["部分完成", "Partially completed"],
+    unavailable: ["暂不可用", "Unavailable"]
+  };
+  return tr(lang, ...(labels[status] || labels.unavailable));
+}
+
+function riskControlLabel(value, lang) {
+  const labels = {
+    "0": ["0/5 未定义", "0/5 Undefined"],
+    "1": ["1/5 低", "1/5 Low"],
+    "2": ["2/5 中", "2/5 Medium"],
+    "3": ["3/5 中高", "3/5 Medium-high"],
+    "4": ["4/5 高", "4/5 High"],
+    "5": ["5/5 高（人工配置）", "5/5 High (manual)"]
+  };
+  return tr(lang, ...(labels[String(value)] || ["无数据", "Unavailable"]));
+}
+
+function tokenTagLabel(tag, lang) {
+  const labels = {
+    honeypot: ["貔貅盘", "Honeypot"],
+    lowLiquidity: ["低流动性", "Low liquidity"],
+    communityRecognized: ["社区认可", "Community recognized"],
+    devHoldingStatusSell: ["开发者已卖出", "Developer sold"],
+    devHoldingStatusSellAll: ["开发者已全部卖出", "Developer sold all"],
+    devHoldingStatusBuy: ["开发者增持", "Developer bought more"],
+    initialHighLiquidity: ["初始流动性较高", "High initial liquidity"],
+    devAddLiquidity: ["开发者增加流动性", "Developer added liquidity"],
+    devBurnToken: ["开发者销毁代币", "Developer burned tokens"]
+  };
+  const value = labels[tag];
+  return value ? tr(lang, ...value) : tag;
+}
+
+function limitationLabel(code, lang) {
+  const labels = {
+    credentials_unavailable: ["链上数据凭证未配置。", "On-chain data credentials are not configured."],
+    upstream_timeout: ["上游数据源响应超时。", "The upstream data source timed out."],
+    upstream_unavailable: ["上游数据源暂时不可用。", "The upstream data source is temporarily unavailable."],
+    upstream_http_error: ["上游数据源返回 HTTP 错误。", "The upstream data source returned an HTTP error."],
+    upstream_business_error: ["上游数据源未接受本次查询。", "The upstream data source did not accept this query."],
+    invalid_upstream_response: ["上游返回内容无法验证。", "The upstream response could not be validated."],
+    no_exact_token_match: ["未找到精确匹配的代币记录。", "No exact token record was found."],
+    some_searches_unavailable: ["部分地址搜索未完成。", "Some address searches did not complete."],
+    some_advanced_checks_unavailable: ["部分高级风险指标未返回。", "Some advanced risk indicators were unavailable."],
+    contract_found_on_multiple_chains: ["同一地址在多条链上存在匹配，请确认目标链。", "The address matched multiple chains; confirm the intended chain."],
+    address_limit_applied: ["单次最多核验三个合约地址。", "A maximum of three contract addresses is checked per request."],
+    match_limit_applied: ["单次最多展示三个链上精确匹配。", "A maximum of three exact on-chain matches is shown per request."],
+    preliminary_token_data_only: ["仅完成代币数据初筛。", "Only preliminary token-data screening was performed."],
+    onchain_status_not_verified: ["本次未核验链上状态。", "On-chain status was not verified."]
+  };
+  return tr(lang, ...(labels[code] || ["存在未覆盖的数据项。", "Some data remains uncovered."]));
+}
+
+function formatUsd(value, lang) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return tr(lang, "无数据", "Unavailable");
+  return new Intl.NumberFormat(lang === "en" ? "en-US" : "zh-CN", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }).format(number);
+}
+
+function formatInteger(value, lang) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return tr(lang, "无数据", "Unavailable");
+  return new Intl.NumberFormat(lang === "en" ? "en-US" : "zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(number);
+}
+
+function formatPercentValue(value, lang) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toLocaleString(lang === "en" ? "en-US" : "zh-CN", { maximumFractionDigits: 2 })}%` : tr(lang, "无数据", "Unavailable");
+}
+
+function shortAddress(value) {
+  const text = String(value || "");
+  return text.length > 18 ? `${text.slice(0, 10)}…${text.slice(-6)}` : text;
+}
+
+function formatOnchainDate(value, lang) {
+  return value ? formatDate(value, lang) : tr(lang, "未完成", "Not completed");
 }
 
 function renderEditorialItems(items) {

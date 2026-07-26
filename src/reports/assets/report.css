@@ -519,6 +519,175 @@ html[data-service="before-ape"] .summary-metrics {
   background: var(--surface);
 }
 
+.onchain-verification {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.onchain-heading .verification-status {
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 4px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.onchain-verification[data-status="unavailable"] .verification-status,
+.onchain-verification[data-status="partial"] .verification-status {
+  border-color: color-mix(in srgb, var(--warning) 48%, var(--line));
+  background: color-mix(in srgb, var(--warning) 11%, var(--surface));
+}
+
+.verification-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.verification-meta b {
+  margin-right: 5px;
+  color: var(--text);
+}
+
+.token-record {
+  margin: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.token-record--danger {
+  border-left-color: var(--danger);
+}
+
+.token-record > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.token-record > header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.token-record h3 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.token-record code {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-record dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.token-record dl > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.token-record dl > div:nth-child(4n) {
+  border-right: 0;
+}
+
+.token-record dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.token-record dd {
+  margin: 5px 0 0;
+  font-size: 14px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.token-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+}
+
+.token-tags > span,
+.token-tags > em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.token-tag {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.token-tag--danger {
+  border-color: color-mix(in srgb, var(--danger) 54%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.verification-empty {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--line));
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+
+.verification-empty i {
+  color: var(--warning);
+  font-size: 20px;
+}
+
+.verification-empty p,
+.verification-boundary p {
+  margin: 0;
+}
+
+.verification-boundary {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.verification-boundary strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.verification-boundary ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
 .ape-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
@@ -863,6 +1032,18 @@ html[data-service="before-shill"] {
     grid-template-columns: 1fr 1fr;
   }
 
+  .token-record dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .token-record dl > div:nth-child(4n) {
+    border-right: 1px solid var(--line);
+  }
+
+  .token-record dl > div:nth-child(2n) {
+    border-right: 0;
+  }
+
   .metric:nth-child(3) {
     border-left: 0;
     border-top: 1px solid var(--line);
@@ -956,6 +1137,22 @@ html[data-service="before-shill"] {
 
   .summary-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .token-record > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .token-record dl {
+    grid-template-columns: 1fr;
+  }
+
+  .token-record dl > div,
+  .token-record dl > div:nth-child(2n),
+  .token-record dl > div:nth-child(4n) {
+    border-right: 0;
   }
 
   .metric + .metric {

@@ -2,16 +2,18 @@
 
 ## Product Boundary
 
-Before Series performs static analysis of text supplied in a single request. It does not:
+Before Series analyzes text supplied in a single request. Before Ape additionally performs a bounded OKX OnchainOS token lookup when the input contains an EVM contract address. It does not:
 
 - fetch or open submitted links;
 - connect to a wallet;
 - sign or broadcast transactions;
 - request seed phrases, private keys, passwords, API secrets, or verification codes;
-- query live contract state, transaction simulation, bytecode, token audits, or AML labels;
+- query arbitrary RPC state, simulate transactions, audit source or bytecode, test actual selling, or query AML labels;
 - certify that a project, website, contract, signature, or post is safe, legal, or compliant.
 
 This boundary is deliberate. A short pasted popup cannot support a definitive security verdict. The service separates visible evidence, confidence, and unknown information, and it never treats missing evidence as proof of safety.
+
+Before Ape's live lookup sends only validated chain IDs and up to three public EVM contract addresses to fixed OKX Token API endpoints. It may return exact token identity, market indicators, OKX risk-control level, token tags, and available concentration data. These time-stamped indicators can change or be unavailable and are presented as preliminary evidence, not a contract audit or safety guarantee.
 
 ## Threat Model
 
@@ -32,6 +34,8 @@ All submitted content is untrusted. Relevant threats include:
 
 - Deterministic rules only; untrusted text cannot change system behavior.
 - No server-side URL retrieval or command execution.
+- Before Ape network egress is restricted in code to fixed `https://web3.okx.com` Token API paths; redirects are rejected, responses are size-bounded, calls time out, and the user's full text is never forwarded.
+- OKX token responses are schema-bounded and exact-matched to the requested chain/address. Upstream failure, no match, and absent tags fail closed as unknown or unavailable, never safe.
 - Sensitive-value fail-safe handling before evidence generation; detected secrets are not hashed or echoed.
 - NFKC and zero-width normalization before security signal matching.
 - No request-body logging and no separate retention of the original request body.

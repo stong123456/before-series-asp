@@ -163,6 +163,247 @@ export function analyzeBeforeApe(rawInput, options = {}) {
   };
 }
 
+export function applyApeOnchainIntelligence(result, onchain) {
+  if (!onchain || onchain.status === "not_applicable") return result;
+  const lang = result.language === "en" ? "en" : "zh";
+  const card = {
+    ...result.card,
+    mainRedFlags: [...result.card.mainRedFlags],
+    informationGaps: [...result.card.informationGaps],
+    topThreeChecks: [...result.card.topThreeChecks]
+  };
+  const assessment = {
+    ...result.assessment,
+    checked: [...result.assessment.checked],
+    unverified: [...result.assessment.unverified]
+  };
+  const scope = {
+    ...result.scope,
+    method: onchain.matches.length ? "static_text_and_live_token_screening" : result.scope.method,
+    onchainQueryAttempted: Boolean(onchain.attempted),
+    queriedOnchainData: onchain.matches.length > 0
+  };
+
+  if (!onchain.matches.length) {
+    card.informationGaps = take([
+      onchain.status === "unavailable"
+        ? tr(lang, "链上数据服务本次不可用，合约状态、流动性与貔貅标签均未得到核验；请勿把本次缺失视为低风险。", "The on-chain data service was unavailable, so contract status, liquidity, and honeypot tags were not verified. Do not interpret missing data as low risk.")
+        : tr(lang, "OKX Token API 未找到与该地址完全匹配的代币记录；这不代表合约安全，也可能是链选择、新合约收录或地址类型问题。", "OKX Token API returned no exact token match. This does not indicate safety and may reflect chain selection, indexing delay, or a non-token address."),
+      ...card.informationGaps
+    ], 4);
+    assessment.unverified = take([
+      tr(lang, "该地址对应的链上代币身份、实时流动性和风险标签", "The address's token identity, live liquidity, and risk tags"),
+      ...assessment.unverified
+    ], 4);
+    card.riskNotice = onchainNotice(lang, false);
+    return {
+      ...result,
+      assessment,
+      scope,
+      onchain,
+      card,
+      cardText: `${renderCard(card, lang)}\n\n${renderOnchainCard(onchain, lang)}`
+    };
+  }
+
+  const findings = deriveOnchainFindings(onchain, lang);
+  const currentRisk = result.risk?.level || "insufficient";
+  const targetRisk = findings.flags.length ? maxRisk(currentRisk, findings.minimumRisk) : currentRisk;
+  const targetRiskLabel = localizedRisk(targetRisk, lang);
+  const highConcern = ["high", "severe"].includes(targetRisk);
+
+  card.riskLevel = targetRiskLabel;
+  card.mainRedFlags = take([...findings.flags, ...card.mainRedFlags], 5);
+  card.informationGaps = take([
+    ...(onchain.ambiguous
+      ? [tr(lang, "同一合约地址在多条链上存在匹配记录，报告未擅自替用户选择唯一链。", "The same contract address matched more than one chain; the report did not silently choose one.")]
+      : []),
+    ...card.informationGaps.filter((item) => !/未提供可核对的合约地址|No contract address/i.test(item))
+  ], 4);
+  card.oneLineConclusion = findings.honeypot
+    ? tr(lang, "OKX OnchainOS 返回了貔貅盘标签。当前合约应按高风险处理，在独立核验前停止购买、授权或交互。", "OKX OnchainOS returned a honeypot tag. Treat this contract as high risk and stop buying, approving, or interacting until independently verified.")
+    : findings.minimumRisk === "high"
+      ? tr(lang, "链上实时指标出现高风险信号，最稳妥的做法是暂停交互并逐项核验合约与流动性。", "Live token data contains a high-risk signal. Pause interaction and verify the contract and liquidity indicators one by one.")
+      : tr(lang, `${card.oneLineConclusion} 已补充 OKX OnchainOS 实时代币数据，仍需结合合约源码、交易模拟与独立审计判断。`, `${card.oneLineConclusion} Live OKX OnchainOS token data was added, but source review, simulation, and independent audit are still needed.`);
+  card.saferAction = highConcern
+    ? tr(lang, "暂停购买、授权、质押和转账；从官方渠道确认链与合约地址，再用区块浏览器、交易模拟和独立安全工具复核。不要用主钱包试错。", "Pause buying, approving, staking, and transfers. Confirm the chain and address through official channels, then verify with an explorer, transaction simulation, and an independent security tool. Do not test with a primary wallet.")
+    : card.saferAction;
+  card.riskNotice = onchainNotice(lang, true);
+
+  assessment.evidenceStatus = {
+    key: "text_and_live_token_indicators",
+    label: tr(lang, "已获得文本迹象与实时代币指标", "Text indicators and live token data obtained")
+  };
+  assessment.confidence = {
+    key: findings.flags.length ? "high" : "medium",
+    label: tr(lang, findings.flags.length ? "高" : "中", findings.flags.length ? "High" : "Medium")
+  };
+  if (highConcern) {
+    assessment.recommendedDecision = {
+      key: findings.honeypot ? "stop" : "pause_and_verify",
+      label: tr(lang, findings.honeypot ? "停止当前操作并独立复核" : "暂停操作，完成关键核验", findings.honeypot ? "Stop the current action and verify independently" : "Pause and complete key verification")
+    };
+    card.recommendedDecision = assessment.recommendedDecision.label;
+  }
+  assessment.checked = take([
+    tr(lang, "OKX OnchainOS 代币精确地址匹配、风控等级与风险标签", "OKX OnchainOS exact token match, risk-control level, and token tags"),
+    tr(lang, "实时价格、流动性、市值、持有人数及可用的持仓集中度指标", "Live price, liquidity, market cap, holder count, and available concentration metrics"),
+    ...assessment.checked
+  ], 5);
+  assessment.unverified = take([
+    tr(lang, "合约字节码、代理实现、管理员权限、可增发/暂停/拉黑/改税能力", "Contract bytecode, proxy implementation, admin powers, mint/pause/blacklist, and fee controls"),
+    tr(lang, "真实卖出是否成功、交易模拟、资金来源与地址 AML 信誉", "Actual sell success, transaction simulation, fund provenance, and AML address reputation"),
+    ...assessment.unverified
+  ], 5);
+
+  return {
+    ...result,
+    assessment,
+    scope,
+    risk: {
+      ...result.risk,
+      level: targetRisk,
+      score: Math.max(Number(result.risk?.score || 0), findings.score),
+      confidence: assessment.confidence.key,
+      observedSignalCount: Number(result.risk?.observedSignalCount || 0) + findings.flags.length
+    },
+    onchain,
+    card,
+    cardText: `${renderCard(card, lang)}\n\n${renderOnchainCard(onchain, lang)}`
+  };
+}
+
+function deriveOnchainFindings(onchain, lang) {
+  const flags = [];
+  let minimumRisk = "low";
+  let score = 0;
+  let honeypot = false;
+
+  for (const match of onchain.matches) {
+    const identity = tokenIdentity(match);
+    const tags = new Set(match.advanced?.tokenTags || []);
+    const riskLevel = Number(match.advanced?.riskControlLevel || 0);
+    const top10 = Number(match.advanced?.top10HoldPercent || NaN);
+    const devHold = Number(match.advanced?.devHoldingPercent || NaN);
+    const suspicious = Number(match.advanced?.suspiciousHoldingPercent || NaN);
+    const rugPulls = Number(match.advanced?.devRugPullTokenCount || 0);
+
+    if (tags.has("honeypot")) {
+      honeypot = true;
+      minimumRisk = maxRisk(minimumRisk, "high");
+      score = Math.max(score, 12);
+      flags.push(tr(lang, `${identity} 被 OKX OnchainOS 标记为“貔貅盘”。该标签是高风险证据，但仍建议使用第二个独立来源复核。`, `${identity} is tagged as a honeypot by OKX OnchainOS. This is high-risk evidence, and a second independent source should still verify it.`));
+    }
+    if (riskLevel >= 4) {
+      minimumRisk = maxRisk(minimumRisk, "high");
+      score = Math.max(score, 11);
+      flags.push(tr(lang, `${identity} 的 OKX 风控等级为 ${riskLevel}/5（高）。`, `${identity} has OKX risk-control level ${riskLevel}/5 (high).`));
+    } else if (riskLevel === 3) {
+      minimumRisk = maxRisk(minimumRisk, "medium_high");
+      score = Math.max(score, 8);
+      flags.push(tr(lang, `${identity} 的 OKX 风控等级为 3/5（中高）。`, `${identity} has OKX risk-control level 3/5 (medium-high).`));
+    }
+    if (tags.has("lowLiquidity")) {
+      minimumRisk = maxRisk(minimumRisk, "medium_high");
+      score = Math.max(score, 8);
+      flags.push(tr(lang, `${identity} 带有低流动性标签，成交滑点、无法退出和价格操纵风险需要重点核验。`, `${identity} carries a low-liquidity tag; slippage, exit failure, and manipulation risk require close review.`));
+    }
+    if (rugPulls > 0) {
+      minimumRisk = maxRisk(minimumRisk, "medium_high");
+      score = Math.max(score, 8);
+      flags.push(tr(lang, `${identity} 的创建者关联历史 Rug Pull 代币数量为 ${rugPulls}。`, `${identity}'s creator is associated with ${rugPulls} historical rug-pull token(s).`));
+    }
+    if (Number.isFinite(top10) && top10 >= 80) {
+      minimumRisk = maxRisk(minimumRisk, top10 >= 95 ? "high" : "medium_high");
+      score = Math.max(score, top10 >= 95 ? 11 : 8);
+      flags.push(tr(lang, `${identity} 前 10 地址持仓占比约 ${formatPercent(top10)}，集中度较高；交易所、LP 或销毁地址是否被计入仍需核验。`, `${identity}'s top-10 holders control about ${formatPercent(top10)}. Concentration is high; verify whether exchanges, LP, or burn addresses are included.`));
+    }
+    if (Number.isFinite(devHold) && devHold >= 20) {
+      minimumRisk = maxRisk(minimumRisk, devHold >= 50 ? "high" : "medium_high");
+      score = Math.max(score, devHold >= 50 ? 11 : 8);
+      flags.push(tr(lang, `${identity} 开发者持仓约 ${formatPercent(devHold)}，需要核验锁仓、可售权限和关联地址。`, `${identity} shows developer holdings of about ${formatPercent(devHold)}; verify locks, sell permissions, and related addresses.`));
+    }
+    if (Number.isFinite(suspicious) && suspicious >= 10) {
+      minimumRisk = maxRisk(minimumRisk, "medium_high");
+      score = Math.max(score, 8);
+      flags.push(tr(lang, `${identity} 可疑地址持仓约 ${formatPercent(suspicious)}。`, `${identity} shows about ${formatPercent(suspicious)} held by suspicious addresses.`));
+    }
+  }
+
+  return { flags: take(flags, 5), minimumRisk, score, honeypot };
+}
+
+function renderOnchainCard(onchain, lang) {
+  const colon = lang === "en" ? ":" : "：";
+  const lines = [
+    lang === "en" ? "[On-chain verification]" : "【链上核验】",
+    `${tr(lang, "数据来源", "Source")}${colon} ${onchain.source.name}`,
+    `${tr(lang, "核验时间", "Checked at")}${colon} ${onchain.queriedAt || tr(lang, "未执行", "Not run")}`,
+    `${tr(lang, "核验状态", "Status")}${colon} ${onchainStatusLabel(onchain.status, lang)}`
+  ];
+  for (const match of onchain.matches) {
+    lines.push(`${tokenIdentity(match)} | ${match.chainName} | ${shortAddress(match.tokenContractAddress)}`);
+    lines.push(`${tr(lang, "风控等级", "Risk-control level")}${colon} ${match.advanced?.riskControlLevel || tr(lang, "无数据", "Unavailable")}/5`);
+    lines.push(`${tr(lang, "风险标签", "Risk tags")}${colon} ${(match.advanced?.tokenTags || []).join(", ") || tr(lang, "未返回；不等于无风险", "None returned; this does not mean risk-free")}`);
+    lines.push(`${tr(lang, "流动性", "Liquidity")}${colon} ${match.liquidityUsd ? `$${formatCompactNumber(match.liquidityUsd)}` : tr(lang, "无数据", "Unavailable")}`);
+  }
+  lines.push(`${tr(lang, "核验边界", "Boundary")}${colon} ${tr(lang, "该数据属于实时代币指标初筛，不包含合约字节码审计、交易模拟或 AML 地址调查。", "This is preliminary live token screening, not bytecode audit, transaction simulation, or AML investigation.")}`);
+  return lines.join("\n");
+}
+
+function onchainNotice(lang, hasData) {
+  return hasData
+    ? tr(lang, "本结果结合用户提供的文字与 OKX OnchainOS 实时代币数据进行前置风险教育。链上指标可能变化或缺失，且本服务未审计合约字节码、未模拟交易、未进行 AML 地址调查，不构成安全认证或投资建议。", "This result combines user-supplied text with live OKX OnchainOS token data for preliminary risk education. On-chain indicators can change or be incomplete; the service does not audit bytecode, simulate transactions, perform AML investigation, certify safety, or provide investment advice.")
+    : tr(lang, "本次链上核验未获得可用结果。缺失数据不代表低风险；本服务未审计合约字节码、未模拟交易、未进行 AML 地址调查，不构成安全认证或投资建议。", "No usable on-chain result was obtained. Missing data does not mean low risk; this service does not audit bytecode, simulate transactions, perform AML investigation, certify safety, or provide investment advice.");
+}
+
+function localizedRisk(key, lang) {
+  const labels = {
+    insufficient: ["信息不足", "Insufficient information"],
+    low: ["低", "Low"],
+    medium_low: ["中低", "Medium-low"],
+    medium: ["中", "Medium"],
+    medium_high: ["中高", "Medium-high"],
+    high: ["高", "High"],
+    severe: ["严重", "Severe"]
+  };
+  return tr(lang, ...(labels[key] || labels.insufficient));
+}
+
+function maxRisk(left, right) {
+  const order = ["insufficient", "low", "medium_low", "medium", "medium_high", "high", "severe"];
+  return order.indexOf(left) >= order.indexOf(right) ? left : right;
+}
+
+function tokenIdentity(match) {
+  return match.tokenSymbol || match.tokenName || shortAddress(match.tokenContractAddress);
+}
+
+function shortAddress(address) {
+  const value = String(address || "");
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
+}
+
+function onchainStatusLabel(status, lang) {
+  const labels = {
+    verified: ["已完成", "Completed"],
+    partial: ["部分完成", "Partially completed"],
+    unavailable: ["暂不可用", "Unavailable"],
+    not_applicable: ["未触发", "Not triggered"]
+  };
+  return tr(lang, ...(labels[status] || labels.unavailable));
+}
+
+function formatPercent(value) {
+  return `${Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+function formatCompactNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(number);
+}
+
 function isInsufficient(prepared, signals) {
   if (signals.some((signal) => signal.weight >= 4)) return false;
   if (signals.some((signal) => signal.weight >= 3) || signals.length >= 2) return false;

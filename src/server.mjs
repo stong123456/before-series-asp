@@ -2,11 +2,12 @@ import dotenv from "dotenv";
 import express from "express";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { analyzeBeforeApe } from "./analyzers/ape.mjs";
+import { analyzeBeforeApe, applyApeOnchainIntelligence } from "./analyzers/ape.mjs";
 import { ANALYSIS_VERSION, InputError, normalizeLang, prepareInput } from "./analyzers/common.mjs";
 import { analyzeBeforeShill } from "./analyzers/shill.mjs";
 import { analyzeBeforeSign } from "./analyzers/sign.mjs";
 import { createContentInputSchema, isInvocationOnly } from "./contracts.mjs";
+import { createOkxTokenIntelligence } from "./onchain/okx-token-intelligence.mjs";
 import { createPaymentLayer, isPaidPath, isProductionRuntime } from "./payment.mjs";
 import { renderReportDocument, renderReportUnavailable } from "./reports/render.mjs";
 import { createReportStore } from "./reports/store.mjs";
@@ -21,8 +22,9 @@ if (productionRuntime && !String(process.env.PUBLIC_BASE_URL || "").trim()) {
   throw new Error("PUBLIC_BASE_URL is required in production.");
 }
 const publicBaseUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`);
-const SERVICE_VERSION = "2.1.0";
+const SERVICE_VERSION = "2.2.0";
 const reportStore = await createReportStore({ production: productionRuntime });
+const tokenIntelligence = createOkxTokenIntelligence();
 const reportAssetsDir = resolve(sourceDir, "reports/assets");
 const phosphorAssetsDir = resolve(sourceDir, "../node_modules/@phosphor-icons/web/src/regular");
 const SERVICES = [
@@ -154,15 +156,16 @@ app.get("/", (_req, res) => {
     version: SERVICE_VERSION,
     analysisVersion: ANALYSIS_VERSION,
     description: {
-      zh: "Before 系列：一次输入，一张双语检查卡，帮助 Web3 用户在冲项目、签钱包和发推之前降低可避免的风险。",
-      en: "Before Series: one input, one bilingual check card for avoidable Web3 risks before aping, signing, or publishing."
+      zh: "Before 系列：一次输入，一张双语检查卡，帮助 Web3 用户在冲项目、签钱包和发推之前降低可避免的风险。Before Ape 可对输入中的 EVM 代币合约执行 OKX OnchainOS 实时初筛。",
+      en: "Before Series: one input, one bilingual check card for avoidable Web3 risks before aping, signing, or publishing. Before Ape can run live OKX OnchainOS preliminary screening for EVM token contracts in the input."
     },
     price: "0.01 USD₮0 per call",
     endpoints: Object.fromEntries(SERVICES.map((service) => [service.key, `${publicBaseUrl}${service.path}`])),
     mcp: `${publicBaseUrl}/mcp`,
     health: `${publicBaseUrl}/health`,
     payment: paymentLayer.status,
-    reports: { enabled: true, ttlHours: reportStore.ttlMs / 3_600_000, storage: reportStore.mode }
+    reports: { enabled: true, defaultLanguage: "zh", ttlHours: reportStore.ttlMs / 3_600_000, storage: reportStore.mode },
+    beforeApeOnchain: tokenIntelligence.status
   });
 });
 
@@ -173,12 +176,13 @@ app.get("/health", (_req, res) => {
     service: "before-series",
     version: SERVICE_VERSION,
     payment: paymentLayer.status.ready ? "ready" : paymentLayer.status.required ? "unavailable" : "disabled_in_development",
-    reports: "ready"
+    reports: "ready",
+    beforeApeOnchain: tokenIntelligence.status.configured ? "ready" : "credentials_unavailable"
   });
 });
 
 app.get("/reports/:id", asyncRoute(async (req, res) => {
-  const lang = normalizeLang(req.query.lang || "auto");
+  const lang = String(req.query.lang || "").trim().toLowerCase() === "en" ? "en" : "zh";
   const record = await reportStore.get(req.params.id);
   res.type("html");
   if (!record) return res.status(410).send(renderReportUnavailable(lang));
@@ -238,9 +242,14 @@ if (isDirectRun) {
 
 async function handleAnalysis(service, input, lang, res) {
   try {
-    const primary = service.analyzer(input, { lang });
+    let primary = service.analyzer(input, { lang });
     const alternateLanguage = primary.language === "en" ? "zh" : "en";
-    const alternate = service.analyzer(input, { lang: alternateLanguage });
+    let alternate = service.analyzer(input, { lang: alternateLanguage });
+    if (service.key === "ape" && !primary.input.sensitiveDataRedacted) {
+      const onchain = await tokenIntelligence.inspect(input);
+      primary = applyApeOnchainIntelligence(primary, onchain);
+      alternate = applyApeOnchainIntelligence(alternate, onchain);
+    }
     const metadata = await reportStore.create({
       primary,
       variants: { [primary.language]: primary, [alternate.language]: alternate }
@@ -313,9 +322,13 @@ function serviceUsage(service, lang) {
       ? "Collect the required content first. Only then call this POST endpoint and show the payment confirmation. GET and HEAD are free usage discovery methods."
       : "先收集必填内容，再调用此 POST 接口并展示付款确认。GET 与 HEAD 仅用于免费查看使用说明。",
     behavior: lang === "en" ? "After content is provided, make one paid call and return one structured card without additional questions." : "用户提供内容后，只发起一次付费调用，不再追问，直接返回一张结构化检查卡。",
-    assessmentBoundary: lang === "en"
-      ? "Static preliminary screening only; no external link fetch, on-chain query, transaction simulation, security certification, or legal opinion."
-      : "仅提供静态前置筛查；不访问外链、不查询链上状态、不模拟交易，不构成安全认证或法律意见。"
+    assessmentBoundary: service.key === "ape"
+      ? lang === "en"
+        ? "Static text screening plus live OKX OnchainOS token data when an EVM contract address is supplied. No external-link fetch, bytecode audit, transaction simulation, AML investigation, security certification, or legal opinion."
+        : "静态文本筛查；输入 EVM 代币合约地址时补充 OKX OnchainOS 实时代币数据。不访问外链、不审计字节码、不模拟交易、不做 AML 调查，也不构成安全认证或法律意见。"
+      : lang === "en"
+        ? "Static preliminary screening only; no external link fetch, on-chain query, transaction simulation, security certification, or legal opinion."
+        : "仅提供静态前置筛查；不访问外链、不查询链上状态、不模拟交易，不构成安全认证或法律意见。"
   };
 }
 

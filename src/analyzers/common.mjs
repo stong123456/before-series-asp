@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-export const ANALYSIS_VERSION = "before-series-2.0.0";
+export const ANALYSIS_VERSION = "before-series-2.2.0";
 export const MAX_INPUT_CHARS = 20_000;
 export const MAX_REWRITTEN_CHARS = 1_800;
 

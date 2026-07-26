@@ -2,7 +2,7 @@
 
 Before Series is an independent bilingual A2MCP service for lightweight Web3 checks:
 
-- **Before Ape**: checks project, campaign, and promotional text before a user participates.
+- **Before Ape**: checks project, campaign, and promotional text before a user participates; when the input contains an EVM token contract, it adds live OKX OnchainOS token screening.
 - **Before Sign**: explains visible wallet-signature and approval risks before confirmation.
 - **Before Shill**: checks Web3 copy for advertising tone, AI-like phrasing, unsupported claims, and publishing risk.
 
@@ -43,9 +43,10 @@ The response includes:
 - `assessment`: risk subject, evidence status, confidence, recommended decision, checked scope, and unverified scope.
 - `evidence`: matched signal IDs, weights, and short evidence snippets.
 - `reportUrl`: a required, unguessable temporary link to the styled bilingual HTML report.
-- `scope`: explicit limits, including no link fetching, on-chain query, transaction simulation, legal opinion, or security certification.
+- `onchain`: Before Ape only; records the OKX OnchainOS source, query time, exact token matches, market indicators, risk-control level, token tags, and limitations when an EVM contract is supplied.
+- `scope`: explicit limits. Before Ape does not fetch submitted links, audit bytecode, simulate transactions, perform AML investigation, issue legal opinions, or certify security. Before Sign and Before Shill remain static checks.
 
-The report styles are intentionally distinct: Before Ape uses a dark evidence desk, Before Sign uses a light audit dossier, and Before Shill uses an editorial action-prescription layout.
+The report styles are intentionally distinct: Before Ape uses a dark evidence desk, Before Sign uses a light audit dossier, and Before Shill uses an editorial action-prescription layout. Bare report links always open in Chinese; `?lang=en` switches to English.
 
 ## Local Development
 
@@ -81,6 +82,11 @@ OKX_BASE_URL=https://web3.okx.com
 OKX_API_KEY=...
 OKX_SECRET_KEY=...
 OKX_PASSPHRASE=...
+# Optional dedicated Market API credentials; falls back to the OKX_* values above.
+OKX_MARKET_API_KEY=...
+OKX_MARKET_SECRET_KEY=...
+OKX_MARKET_PASSPHRASE=...
+OKX_MARKET_TIMEOUT_MS=5000
 REPORT_TTL_HOURS=24
 REPORT_MAX_ENTRIES=2000
 REPORT_STORAGE_DIR=/data/before-reports
@@ -114,7 +120,7 @@ The script verifies:
 7. Non-canonical paid-route aliases return `404`.
 8. MCP discovery returns all three tools and refuses `tools/call` when actual content is absent.
 
-Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, `cardText` ends with the direct report URL, the response includes a settlement response header and `reportUrl`, and each report link opens in Chinese and English.
+Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, `cardText` ends with the direct report URL, the response includes a settlement response header and `reportUrl`, the bare report link opens in Chinese, and `?lang=en` opens the English variant. Also complete one Before Ape paid call with a known EVM token address to confirm the live `onchain` section in production.
 
 ## Safety Model
 
@@ -126,6 +132,8 @@ Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confi
 - Fullwidth and zero-width obfuscation is normalized before signal matching.
 - Sparse project or signing input returns `insufficient`; absence of a keyword is never presented as verified safety.
 - Risk labels name the evaluated subject and separate observed text signals from confidence and unknown information.
+- Before Ape sends only validated chain IDs and up to three public EVM contract addresses to fixed OKX OnchainOS endpoints. It never forwards the user's full text, follows submitted URLs, or treats missing tags/data as proof of safety.
+- Before Ape's live token data is a time-stamped preliminary check. It can surface OKX risk-control levels, honeypot and low-liquidity tags, market data, and available concentration metrics; it does not replace source/bytecode audit, sell simulation, or AML investigation.
 - Before Sign is a static explanation layer, not transaction simulation, bytecode analysis, AML screening, or a contract audit.
 - Before Shill provides general publishing-risk guidance, not jurisdiction-specific legal advice.
 - Temporary report IDs use 192 bits of randomness. Production reports are AES-256-GCM encrypted at rest, expire after 24 hours by default, are not indexed, and are served with restrictive CSP and no-store headers.

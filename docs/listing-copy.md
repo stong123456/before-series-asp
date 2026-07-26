@@ -6,11 +6,11 @@
 
 **Chinese description:**
 
-Before Series 是面向 Web3 普通用户和创作者的轻量前置风险筛查工具。调用时会先请用户粘贴一段项目介绍、钱包签名内容或待发布文案，确认收到实际内容后才进入付款，随后一次性返回简洁的双语检查卡和临时网页报告链接。报告会区分评估对象、可见证据、判断置信度、建议动作与尚未核验范围。Before Ape 用于参与项目前识别红旗与信息缺口；Before Sign 用于签名和授权前解释可见权限风险；Before Shill 用于发布前检查广告味、AI 味、夸大表达与一般发布风险。一次输入，付款后不追问，约三十秒看完。结果仅用于信息整理、风险教育和内容优化，不构成投资建议、安全认证或法律意见。
+Before Series 是面向 Web3 普通用户和创作者的轻量前置风险筛查工具。调用时会先请用户粘贴一段项目介绍、钱包签名内容或待发布文案，确认收到实际内容后才进入付款，随后一次性返回简洁的双语检查卡和临时网页报告链接。报告裸链接默认显示中文，也可切换英文。报告会区分评估对象、可见证据、判断置信度、建议动作与尚未核验范围。Before Ape 用于参与项目前识别红旗与信息缺口，输入 EVM 代币合约时还会补充 OKX OnchainOS 实时代币匹配、风控标签、流动性与持仓集中度初筛；Before Sign 用于签名和授权前解释可见权限风险；Before Shill 用于发布前检查广告味、AI 味、夸大表达与一般发布风险。一次输入，付款后不追问，约三十秒看完。结果仅用于信息整理、风险教育和内容优化，不构成投资建议、安全认证或法律意见。
 
 **English description:**
 
-Before Series is a lightweight bilingual preliminary-risk service for Web3 users and creators. The caller first collects the actual project information, wallet-signature text, or draft copy and starts payment only after that required content is present. One paid call then returns a concise card plus a temporary web-report link. The report separates the risk subject, visible evidence, assessment confidence, recommended decision, and unverified scope. Before Ape reviews pre-participation red flags, Before Sign explains visible signing and approval risks, and Before Shill checks advertising tone, AI-like wording, unsupported claims, and general publishing risk. One input, no post-payment follow-up questions, and a result designed to read in about 30 seconds. The service provides information organization, risk education, and copy editing only. It is not investment advice, a security certification, or legal advice.
+Before Series is a lightweight bilingual preliminary-risk service for Web3 users and creators. The caller first collects the actual project information, wallet-signature text, or draft copy and starts payment only after that required content is present. One paid call then returns a concise card plus a temporary web-report link. Bare report links default to Chinese and can switch to English. The report separates the risk subject, visible evidence, assessment confidence, recommended decision, and unverified scope. Before Ape reviews pre-participation red flags and, when an EVM token contract is supplied, adds live OKX OnchainOS exact-token matching, risk tags, liquidity, and concentration indicators. Before Sign explains visible signing and approval risks, and Before Shill checks advertising tone, AI-like wording, unsupported claims, and general publishing risk. One input, no post-payment follow-up questions, and a result designed to read in about 30 seconds. The service provides information organization, risk education, and copy editing only. It is not investment advice, a security certification, or legal advice.
 
 **Type:** A2MCP
 
@@ -26,11 +26,11 @@ Before Series is a lightweight bilingual preliminary-risk service for Web3 users
 
 **Chinese description:**
 
-付款前请先粘贴项目介绍、推文、群消息、活动规则、官网文案、合约地址或 KOL 推荐内容。收到实际内容后，服务通过一次付费调用返回冲前风险检查卡，列出风险等级、原文红旗、信息缺口、最该核验的三件事和更稳妥的下一步。服务不会访问链接或审计合约，结果仅用于风险教育和信息整理。
+付款前请先粘贴项目介绍、推文、群消息、活动规则、官网文案、合约地址或 KOL 推荐内容。收到实际内容后，服务通过一次付费调用返回冲前风险检查卡，列出风险等级、原文红旗、信息缺口、最该核验的三件事和更稳妥的下一步。输入 EVM 代币合约时，报告会通过 OKX OnchainOS 补充精确代币匹配、风控等级、貔貅与低流动性标签、流动性、市值、持币人数及可用的集中度指标。服务不会访问用户提交的网页链接，也不执行字节码审计、交易模拟或 AML 调查；缺失数据不会被解释为安全。
 
 **English description:**
 
-Before payment, collect the actual project description, post, group message, campaign rule, website copy, contract address, or KOL recommendation. One paid call then returns a pre-ape risk card with the risk level, evidence-backed red flags, information gaps, the top three checks, and a safer next step. The service does not visit links or audit contracts and is for risk education and information organization only.
+Before payment, collect the actual project description, post, group message, campaign rule, website copy, contract address, or KOL recommendation. One paid call then returns a pre-ape risk card with the risk level, evidence-backed red flags, information gaps, the top three checks, and a safer next step. When an EVM token contract is supplied, the report adds OKX OnchainOS exact-token matching, risk-control level, honeypot and low-liquidity tags, liquidity, market cap, holder count, and available concentration indicators. It does not fetch user-submitted web links, audit bytecode, simulate transactions, or perform AML investigation, and missing data is never interpreted as safety.
 
 **Endpoint:** `https://before.stoneup.xyz/api/before/ape`
 
@@ -92,4 +92,4 @@ Before payment, collect the actual Web3 post, promotional draft, campaign introd
 - Payment uses the official OKX Payment SDK on X Layer.
 - Each service costs exactly 0.01 USD₮0 per call.
 - Paid replay returns one structured JSON card and a required temporary bilingual HTML `reportUrl` without follow-up interaction.
-- Chinese and English are supported with `lang: zh`, `lang: en`, or automatic detection.
+- Chinese and English are supported with `lang: zh`, `lang: en`, or automatic detection. Bare report links default to Chinese; `?lang=en` opens English.

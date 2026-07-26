@@ -1,13 +1,13 @@
 {
   "name": "before-series-asp",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "Before Series bilingual A2MCP safety and publishing check cards for Web3 users.",
   "scripts": {
     "dev": "node src/server.mjs",
     "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs && node --check src/payment.mjs && node --check src/contracts.mjs && node --check src/analyzers/common.mjs && node --check src/analyzers/ape.mjs && node --check src/analyzers/sign.mjs && node --check src/analyzers/shill.mjs && node --check src/reports/store.mjs && node --check src/reports/render.mjs && node --check src/reports/assets/report.js && node --check scripts/verify-endpoints.mjs",
+    "check": "node --check src/server.mjs && node --check src/payment.mjs && node --check src/contracts.mjs && node --check src/onchain/okx-token-intelligence.mjs && node --check src/analyzers/common.mjs && node --check src/analyzers/ape.mjs && node --check src/analyzers/sign.mjs && node --check src/analyzers/shill.mjs && node --check src/reports/store.mjs && node --check src/reports/render.mjs && node --check src/reports/assets/report.js && node --check scripts/verify-endpoints.mjs",
     "test": "node --test --test-isolation=none test/*.test.mjs",
     "verify:public": "node scripts/verify-endpoints.mjs"
   },
