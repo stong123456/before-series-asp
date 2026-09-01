@@ -38,8 +38,8 @@ Run this checklist from top to bottom before submitting the Agent.
 - [ ] Network is `eip155:196`, scheme is `exact`, and amount is `10000` base units (0.01 USD₮0).
 - [ ] One real paid replay per endpoint returns HTTP 200 and `PAYMENT-RESPONSE`.
 - [ ] There is no alternate free endpoint that returns the full card.
-- [ ] Empty or invalid input returns a 4xx error before any payment challenge.
-- [ ] Bare Agent invocation text and placeholder content return `400 INPUT_REQUIRED` with `paymentStarted: false` and no payment challenge.
+- [ ] Empty or invocation-only unpaid production POST requests return the standard `402` challenge.
+- [ ] Free GET/MCP discovery declares `content` as required, and MCP `tools/call` rejects missing content without starting payment.
 - [ ] Every 402 challenge includes `extensions.bazaar.info.input` with `method=POST`, `bodyType=json`, and required `body.content`.
 
 ## Interaction

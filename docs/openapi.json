@@ -205,7 +205,7 @@
         }
       },
       "InputError": {
-        "description": "Invalid, empty, placeholder, invocation-only, malformed, or oversized input. Missing-content errors occur before payment and include paymentStarted=false plus the required input schema.",
+        "description": "Invalid, empty, placeholder, invocation-only, malformed, or oversized input after a paid replay, or during free MCP intake. A production unpaid POST is intercepted by the OKX Payment SDK and returns 402 before business validation.",
         "content": {
           "application/json": {
             "schema": {
@@ -396,7 +396,7 @@
           },
           "paymentStarted": {
             "type": "boolean",
-            "description": "False on missing-content preflight errors because x402 was not reached."
+            "description": "False on free MCP intake errors where payment was not started. Canonical production POST endpoints issue 402 before business validation."
           },
           "requiredInput": {
             "type": "object",

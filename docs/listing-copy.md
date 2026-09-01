@@ -86,8 +86,8 @@ Before payment, collect the actual Web3 post, promotional draft, campaign introd
 
 - Each listed endpoint is a public HTTPS `POST` endpoint.
 - `GET` and `HEAD` on each service endpoint are free usage discovery methods and never trigger payment.
-- Empty content, placeholders, and bare Agent invocation text return `400 INPUT_REQUIRED` with `paymentStarted: false`; the caller must ask for actual content before payment.
-- An unpaid request returns HTTP `402` with a standard `PAYMENT-REQUIRED` x402 v2 header.
+- Free GET/MCP discovery declares `content` as required and tells the Buyer Agent to collect real content before payment confirmation.
+- Every unpaid production POST, including an empty test request, returns HTTP `402` with a standard `PAYMENT-REQUIRED` x402 v2 header.
 - Every 402 challenge declares a Bazaar `POST` JSON input whose `content` field is required.
 - Payment uses the official OKX Payment SDK on X Layer.
 - Each service costs exactly 0.01 USD₮0 per call.

@@ -25,8 +25,8 @@
 
 | Operation | Control |
 |---|---|
-| Input before payment | GET/HEAD are free; empty, placeholder, and invocation-only POST requests fail before x402; the Bazaar challenge declares required `body.content` |
-| Payment | Only a POST with actual content can reach x402; the Buyer Agent must then show and obtain the user's required payment confirmation through OKX Agent Payments Protocol |
+| Input before payment | GET/HEAD and MCP discovery are free and declare required `content`; MCP `tools/call` rejects missing content before payment; the Bazaar challenge also declares required `body.content` |
+| Payment | The canonical POST follows x402 and returns 402 before business validation; the Buyer Agent must collect content from discovery metadata, then show and obtain the user's required payment confirmation through OKX Agent Payments Protocol |
 | Wallet action | Service cannot connect, sign, approve, or broadcast; the user keeps final authority |
 | High-risk result | Card recommends pausing or cancelling but never executes an action |
 | Publishing | Before Shill returns a draft; the user decides whether to publish |
@@ -104,8 +104,8 @@ The architecture has a narrow and read-only user-facing capability, no user-wall
 ## Launch Verification Snapshot
 
 - Public health: `200`, with payment and reports both ready.
-- Public invalid-input preflight: empty content returns `400 INPUT_REQUIRED` before any payment challenge.
-- Public intake verification: free GET usage works; placeholder and bare Agent-invocation requests return `paymentStarted: false` without a challenge.
+- Public x402 verification: empty and invocation-only unpaid production POST requests return the standard `402` challenge.
+- Public intake verification: free GET usage works; MCP discovery requires `content` and refuses a missing-content `tools/call` before payment.
 - Public unpaid verification: all three canonical endpoints return valid 0.01 USD₮0 x402 v2 challenges on X Layer.
 - Public input contract: each challenge declares a Bazaar POST JSON body with required `content`.
 - Public challenge resource URLs: match `https://before.stoneup.xyz/api/before/{ape|sign|shill}` exactly.

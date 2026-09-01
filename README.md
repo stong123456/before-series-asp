@@ -34,7 +34,7 @@ JSON request:
 
 `lang` supports `auto`, `zh`, and `en`. The server also accepts plain-text request bodies and common input keys such as `text`, `input`, `message`, and `prompt`.
 
-`content` is mandatory **before** payment. Empty input, placeholder text, or a bare “use Agent / service / endpoint” invocation returns `400 INPUT_REQUIRED` with `paymentStarted: false` and a service-specific prompt. A valid unpaid request then returns the standard `402` challenge. The challenge includes the official Bazaar input declaration (`POST`, JSON body, required `content`) so a compatible buyer Agent can ask for missing content before showing payment confirmation.
+`content` must be collected by the Buyer Agent **before** payment confirmation. Free `GET` usage discovery and MCP `tools/list` / `tools/call` expose the service-specific prompt and required input schema; an MCP call without real content is rejected without starting payment. The canonical production `POST` endpoint follows x402 strictly and returns the standard `402` challenge before business validation. That challenge includes the official Bazaar input declaration (`POST`, JSON body, required `content`) so a compatible Buyer Agent can collect the missing content before asking the user to approve payment.
 
 The response includes:
 
@@ -114,11 +114,11 @@ The script verifies:
 1. `/health` returns `200` with payment and reports ready.
 2. Report assets use the restrictive report CSP.
 3. Every service `GET` returns free usage instructions and never emits a payment challenge.
-4. Empty input and bare Agent-invocation text return `400 INPUT_REQUIRED` with `paymentStarted: false` before any payment challenge.
+4. Empty and invocation-only unpaid production `POST` requests still return the standard `402` challenge.
 5. All three valid unpaid `POST` requests return `402` with a decodable `PAYMENT-REQUIRED` header.
 6. Each challenge uses x402 v2, X Layer, the exact endpoint URL, a 0.01 payment amount, and a Bazaar schema requiring `body.content`.
 7. Non-canonical paid-route aliases return `404`.
-8. MCP discovery returns all three tools and refuses `tools/call` when actual content is absent.
+8. MCP discovery returns all three tools and refuses `tools/call` when actual content is absent, before payment starts.
 
 Complete one real 0.01 USD₮0 paid call for each endpoint before listing. Confirm that the paid replay returns `200`, the card matches the selected service, `cardText` ends with the direct report URL, the response includes a settlement response header and `reportUrl`, the bare report link opens in Chinese, and `?lang=en` opens the English variant. Also complete one Before Ape paid call with a known EVM token address to confirm the live `onchain` section in production.
 

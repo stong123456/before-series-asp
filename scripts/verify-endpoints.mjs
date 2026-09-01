@@ -33,12 +33,10 @@ for (const service of services) {
     headers: { "Content-Type": "application/json" },
     body: "{}"
   }, 12_000);
-  assert(response.status === 400, `${service.key} invalid-input preflight expected 400, received ${response.status}.`);
-  const body = await response.json();
-  assert(body.error?.code === "INPUT_REQUIRED", `${service.key} invalid-input preflight must return INPUT_REQUIRED.`);
-  assert(body.paymentStarted === false, `${service.key} invalid-input preflight must state paymentStarted=false.`);
-  assert(body.requiredInput?.schema?.required?.includes("content"), `${service.key} must declare content as required before payment.`);
-  assert(!response.headers.get("payment-required"), `${service.key} invalid-input preflight must not emit a payment challenge.`);
+  assert(response.status === 402, `${service.key} empty unpaid POST expected standard 402, received ${response.status}.`);
+  const emptyChallenge = decodeBase64Json(response.headers.get("payment-required"));
+  const emptyBodySchema = emptyChallenge.extensions?.bazaar?.schema?.properties?.input?.properties?.body;
+  assert(emptyBodySchema?.required?.includes("content"), `${service.key} empty challenge must declare body.content as required.`);
 }
 
 const invocationOnly = await fetchWithTimeout(`${baseUrl}/api/before/ape`, {
@@ -49,9 +47,8 @@ const invocationOnly = await fetchWithTimeout(`${baseUrl}/api/before/ape`, {
     lang: "en"
   })
 }, 12_000);
-assert(invocationOnly.status === 400, `Invocation-only request expected 400, received ${invocationOnly.status}.`);
-assert(!invocationOnly.headers.get("payment-required"), "Invocation-only request must not emit a payment challenge.");
-assert((await invocationOnly.json()).paymentStarted === false, "Invocation-only request must state paymentStarted=false.");
+assert(invocationOnly.status === 402, `Invocation-only unpaid POST expected standard 402, received ${invocationOnly.status}.`);
+assert(invocationOnly.headers.get("payment-required"), "Invocation-only unpaid POST must emit PAYMENT-REQUIRED.");
 
 for (const service of services) {
   const url = `${baseUrl}${service.path}`;
@@ -101,7 +98,7 @@ for (const name of ["before_ape", "before_sign", "before_shill"]) {
   assert(/do not initiate payment/i.test(tool.description || ""), `${name} must tell callers not to pay before content.`);
 }
 
-console.log(`Verified ${baseUrl}: free usage discovery, content-first preflight, invocation guard, strict POST-only paid routes, Bazaar input schemas, three 0.01 USDt0 x402 challenges, and MCP discovery are valid.`);
+console.log(`Verified ${baseUrl}: free content-first discovery, invocation guard, strict POST-only paid routes, Bazaar input schemas, three 0.01 USDt0 x402 challenges, and MCP discovery are valid.`);
 
 function decodeBase64Json(value) {
   try {
