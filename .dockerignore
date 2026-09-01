@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules
+npm-debug.log*
+test
+docs
+examples
+scripts
+railway.json
+README.md
+reports
+data

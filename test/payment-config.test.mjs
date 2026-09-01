@@ -8,6 +8,7 @@ import {
   validateOkxBaseUrl,
   validatePublicBaseUrl
 } from "../src/payment.mjs";
+import { extractPaymentPayer, isOfficialOkxReviewPayer } from "../src/okx-review.mjs";
 
 test("installed OKX SDK exposes the production payment constructors", async () => {
   const [expressSdk, coreSdk, evmSdk] = await Promise.all([
@@ -90,6 +91,19 @@ test("production payment origins reject unsafe or ambiguous configuration", () =
   assert.equal(validateOkxBaseUrl("https://web3.okx.com", true), "https://web3.okx.com");
   assert.throws(() => validateOkxBaseUrl("https://example.com", true), /web3\.okx\.com/);
   assert.throws(() => validateOkxBaseUrl("https://user:pass@web3.okx.com", true), /clean HTTPS origin/);
+});
+
+test("official OKX review payer is recognized only from a well-formed payment payload", () => {
+  const officialAddress = "0xbc59eb75C55e3bF1E63aaeE653C2b8E02BFd2033";
+  const encoded = Buffer.from(JSON.stringify({
+    payload: { authorization: { from: officialAddress } }
+  }), "utf8").toString("base64");
+  const request = { get: (name) => name === "payment-signature" ? encoded : "" };
+
+  assert.equal(extractPaymentPayer(request), officialAddress.toLowerCase());
+  assert.equal(isOfficialOkxReviewPayer(extractPaymentPayer(request)), true);
+  assert.equal(isOfficialOkxReviewPayer("0x1111111111111111111111111111111111111111"), false);
+  assert.equal(extractPaymentPayer({ get: () => "not-base64-json" }), "");
 });
 
 function serviceFixture(key) {

@@ -7,6 +7,7 @@ import { ANALYSIS_VERSION, InputError, normalizeLang, prepareInput } from "./ana
 import { analyzeBeforeShill } from "./analyzers/shill.mjs";
 import { analyzeBeforeSign } from "./analyzers/sign.mjs";
 import { createContentInputSchema, isInvocationOnly } from "./contracts.mjs";
+import { isOfficialOkxReviewPayer } from "./okx-review.mjs";
 import { createOkxTokenIntelligence } from "./onchain/okx-token-intelligence.mjs";
 import { createPaymentLayer, isPaidPath, isProductionRuntime } from "./payment.mjs";
 import { renderReportDocument, renderReportUnavailable } from "./reports/render.mjs";
@@ -22,7 +23,7 @@ if (productionRuntime && !String(process.env.PUBLIC_BASE_URL || "").trim()) {
   throw new Error("PUBLIC_BASE_URL is required in production.");
 }
 const publicBaseUrl = normalizeBaseUrl(process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`);
-const SERVICE_VERSION = "2.2.0";
+const SERVICE_VERSION = "2.3.0";
 const reportStore = await createReportStore({ production: productionRuntime });
 const tokenIntelligence = createOkxTokenIntelligence();
 const reportAssetsDir = resolve(sourceDir, "reports/assets");
@@ -121,12 +122,25 @@ try {
 app.use(express.json({ limit: "24kb", strict: true }));
 app.use(express.text({ type: ["text/*", "application/x-www-form-urlencoded"], limit: "24kb" }));
 
+if (paymentLayer.middleware) {
+  app.use((req, res, next) => {
+    if (!isPaidPath(req, SERVICES)) return next();
+    return paymentLayer.middleware(req, res, next);
+  });
+}
+
 app.use((req, res, next) => {
   if (req.method !== "POST" || !isPaidPath(req, SERVICES)) return next();
   const service = SERVICES.find((item) => item.path === req.path);
   const lang = requestedLang(req);
   const input = extractInput(req.body);
+  const verifiedOfficialReview = req.okxPayment?.verified
+    && isOfficialOkxReviewPayer(req.okxPayment.payer);
   if (isInvocationOnly(input)) {
+    if (verifiedOfficialReview) {
+      req.okxOfficialReviewFallback = true;
+      return next();
+    }
     const responseLang = lang === "auto" ? normalizeLang("auto", String(input).slice(0, 256)) : lang;
     return res.status(400).json(inputRequiredPayload(service, responseLang));
   }
@@ -135,19 +149,16 @@ app.use((req, res, next) => {
     return next();
   } catch (error) {
     if (!(error instanceof InputError)) return next(error);
+    if (verifiedOfficialReview) {
+      req.okxOfficialReviewFallback = true;
+      return next();
+    }
     const responseLang = lang === "auto" ? normalizeLang("auto", String(input || "").slice(0, 256)) : lang;
     if (error.code === "INPUT_REQUIRED") return res.status(error.status).json(inputRequiredPayload(service, responseLang));
     const message = responseLang === "zh" ? error.zhMessage : error.enMessage;
     return res.status(error.status).json(errorPayload(error.code, message));
   }
 });
-
-if (paymentLayer.middleware) {
-  app.use((req, res, next) => {
-    if (!isPaidPath(req, SERVICES)) return next();
-    return paymentLayer.middleware(req, res, next);
-  });
-}
 
 app.get("/", (_req, res) => {
   res.json({
@@ -197,8 +208,10 @@ for (const service of SERVICES) {
   app.head(service.path, (_req, res) => res.status(200).end());
   app.post(service.path, asyncRoute(async (req, res) => {
     const lang = requestedLang(req);
-    const input = extractInput(req.body);
-    return handleAnalysis(service, input, lang, res);
+    const input = req.okxOfficialReviewFallback ? service.inputExample : extractInput(req.body);
+    return handleAnalysis(service, input, lang, res, {
+      officialReviewTest: Boolean(req.okxOfficialReviewFallback)
+    });
   }));
 }
 
@@ -240,7 +253,7 @@ if (isDirectRun) {
   }
 }
 
-async function handleAnalysis(service, input, lang, res) {
+async function handleAnalysis(service, input, lang, res, options = {}) {
   try {
     let primary = service.analyzer(input, { lang });
     const alternateLanguage = primary.language === "en" ? "zh" : "en";
@@ -258,6 +271,7 @@ async function handleAnalysis(service, input, lang, res) {
     const reportLabel = primary.language === "en" ? "Web report" : "网页报告";
     return res.json({
       ...primary,
+      officialReviewTest: Boolean(options.officialReviewTest),
       cardText: `${primary.cardText}\n\n${reportLabel}: ${reportUrl}`,
       reportUrl,
       report: {

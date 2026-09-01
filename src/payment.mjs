@@ -1,5 +1,6 @@
 import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
 import { createBazaarExtensions } from "./contracts.mjs";
+import { extractPaymentPayer } from "./okx-review.mjs";
 
 const PRICE_USD = "0.01";
 
@@ -66,7 +67,14 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
     status,
     middleware(req, res, next) {
       wrapPaymentRequiredResponse(res);
-      return sdkMiddleware(req, res, next);
+      return sdkMiddleware(req, res, (error) => {
+        if (error) return next(error);
+        req.okxPayment = {
+          verified: true,
+          payer: extractPaymentPayer(req)
+        };
+        return next();
+      });
     }
   };
 }
