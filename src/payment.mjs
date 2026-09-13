@@ -42,7 +42,7 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
     secretKey,
     passphrase,
     baseUrl: validateOkxBaseUrl(process.env.OKX_BASE_URL || "https://web3.okx.com", required),
-    syncSettle: process.env.OKX_SYNC_SETTLE === undefined ? true : truthy(process.env.OKX_SYNC_SETTLE)
+    syncSettle: truthy(process.env.OKX_SYNC_SETTLE)
   });
   const resourceServer = new x402ResourceServer(facilitatorClient);
   resourceServer.register(status.network, new ExactEvmScheme());
@@ -73,10 +73,19 @@ export async function createPaymentLayer({ publicBaseUrl, services }) {
           verified: true,
           payer: extractPaymentPayer(req)
         };
+        logVerifiedPayment(req);
         return next();
       });
     }
   };
+}
+
+function logVerifiedPayment(req) {
+  const payer = req.okxPayment?.payer || "unknown";
+  const payerClass = payer === "0xbc59eb75c55e3bf1e63aaee653c2b8e02bfd2033"
+    ? "official-review"
+    : (payer === "unknown" ? "unknown" : "customer");
+  console.info(`[x402] verified method=${req.method} path=${req.path} payer=${payerClass}`);
 }
 
 export function isProductionRuntime(env = process.env) {

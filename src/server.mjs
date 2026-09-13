@@ -122,6 +122,11 @@ try {
 app.use(express.json({ limit: "24kb", strict: true }));
 app.use(express.text({ type: ["text/*", "application/x-www-form-urlencoded"], limit: "24kb" }));
 
+app.use((req, res, next) => {
+  if (!isPaidPath(req, SERVICES) || hasPaymentPayload(req)) return next();
+  return validatePaidServiceInput(req, res, next, { allowOfficialReviewFallback: false });
+});
+
 if (paymentLayer.middleware) {
   app.use((req, res, next) => {
     if (!isPaidPath(req, SERVICES)) return next();
@@ -130,11 +135,16 @@ if (paymentLayer.middleware) {
 }
 
 app.use((req, res, next) => {
-  if (req.method !== "POST" || !isPaidPath(req, SERVICES)) return next();
+  if (!isPaidPath(req, SERVICES)) return next();
+  return validatePaidServiceInput(req, res, next, { allowOfficialReviewFallback: true });
+});
+
+function validatePaidServiceInput(req, res, next, { allowOfficialReviewFallback }) {
   const service = SERVICES.find((item) => item.path === req.path);
   const lang = requestedLang(req);
   const input = extractInput(req.body);
-  const verifiedOfficialReview = req.okxPayment?.verified
+  const verifiedOfficialReview = allowOfficialReviewFallback
+    && req.okxPayment?.verified
     && isOfficialOkxReviewPayer(req.okxPayment.payer);
   if (isInvocationOnly(input)) {
     if (verifiedOfficialReview) {
@@ -158,7 +168,11 @@ app.use((req, res, next) => {
     const message = responseLang === "zh" ? error.zhMessage : error.enMessage;
     return res.status(error.status).json(errorPayload(error.code, message));
   }
-});
+}
+
+function hasPaymentPayload(req) {
+  return Boolean(req.get("payment-signature") || req.get("x-payment"));
+}
 
 app.get("/", (_req, res) => {
   res.json({
